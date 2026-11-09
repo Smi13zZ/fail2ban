@@ -1840,6 +1840,47 @@ details.raw pre {
   .ttable.tstorage td, .ttable.tstorage th { padding-left: 8px; padding-right: 8px; }
 }
 
+.relnotes {
+  /* 13 行 x 20px + 10px 上内边距。高度直接写字面量：
+     局部自定义属性只在 .relnotes 内有效，拿到别处就是未定义。 */
+  max-height: 270px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--muted);
+  color: var(--dim);
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 卡片内分隔线：把「版本对比 / 状态条」与「更新说明」分开 */
+/* 卡片头正下方的说明：紧贴标题，不留 .help 默认的上间距 */
+/* 安装包清单：文件名与大小分成两行排，文件名独占一行。
+   长文件名在窄列里会被折成两截，看起来像两个不同的包。 */
+.assetlist { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.assetrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+}
+.assetrow .aname {
+  min-width: 0;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.assetrow .asize { flex: 0 0 auto; font-size: 12px; white-space: nowrap; }
+
+.help-tight { margin-top: 0; }
+
+.sep { height: 1px; background: var(--border-soft); margin: 14px 0; }
+
 /* ---------------------------------------------------------- 更新页 --- */
 .vhero {
   display: flex;
