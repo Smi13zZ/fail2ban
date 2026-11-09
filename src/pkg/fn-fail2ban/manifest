@@ -1,5 +1,5 @@
 appname               = fn-fail2ban
-version               = 26.11.8
+version               = 26.11.9
 display_name          = Fail2ban
 desc                  = Fail2ban 原生客户端：可视化配置 Jail、查看封禁记录、手动封禁/解封、管理全局策略与过滤器，并对接系统 fail2ban 服务，支持把封禁同步到「敲门 knock」（fn-knock）通用黑名单。
 platform              = all
