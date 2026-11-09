@@ -3080,10 +3080,15 @@
       return /.fpk$/i.test(name) || (!!item.url && /\.fpk$/i.test(String(item.url)));
     });
     if (!assets.length) return '';
+    // size 为 0 表示「没拿到大小」，不是「文件是空的」：
+    // GitHub 接口被限流后走的是发布订阅源，那条路径只有下载链接没有字节数。
+    // 显示 0 B 会让用户以为包是坏的，所以直接不显示这一列。
     return '<div class="section-title">' + t('update.assets') + '</div><dl class="kv">' +
       assets.map(function (item) {
-        return kv(item.name || '—', '<span class="dim">' +
-          esc(fmtSize(Number(item.size) || 0)) + '</span>');
+        var size = Number(item.size) || 0;
+        return kv(item.name || '—', size > 0
+          ? '<span class="dim">' + esc(fmtSize(size)) + '</span>'
+          : '<span class="dim">' + esc(t('update.sizeUnknown')) + '</span>');
       }).join('') + '</dl>';
   }
 
