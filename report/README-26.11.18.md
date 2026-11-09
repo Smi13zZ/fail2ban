@@ -4,9 +4,12 @@
 
 | 项目 | 地址 / 数值 |
 | --- | --- |
-| 安装包 | `output/fn-fail2ban-26.11.18-all.fpk`（373,909 字节） |
-| Release | https://github.com/Smi13zZ/fail2ban/releases/tag/v26.11.18 |
-| 上一版 | https://github.com/Smi13zZ/fail2ban/releases/tag/v26.11.17 |
+| 安装包 | `output/fn-fail2ban-26.11.19-all.fpk`（374,079 字节） |
+| Release | https://github.com/Smi13zZ/fail2ban/releases/tag/v26.11.19 |
+| 上一版 | https://github.com/Smi13zZ/fail2ban/releases/tag/v26.11.18 |
+
+> 26.11.19 是这一版的收尾补丁：封禁管理去掉「刷新」后页面头部整行变空、
+> 白占 32px，把这一行也去掉。其余内容与本说明一致。
 
 ## 逐条对应
 
