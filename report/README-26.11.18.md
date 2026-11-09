@@ -4,7 +4,7 @@
 
 | 项目 | 地址 / 数值 |
 | --- | --- |
-| 安装包 | `output/fn-fail2ban-26.11.18-all.fpk`（373,692 字节） |
+| 安装包 | `output/fn-fail2ban-26.11.18-all.fpk`（373,909 字节） |
 | Release | https://github.com/Smi13zZ/fail2ban/releases/tag/v26.11.18 |
 | 上一版 | https://github.com/Smi13zZ/fail2ban/releases/tag/v26.11.17 |
 
@@ -93,12 +93,24 @@ fnos-test 上从 26.11.17 升级安装到 26.11.18：
 | `tools/inspect_fpk.py --strict` | PASS |
 | `tmp/selftest_api.py` | 18/18 |
 | `tmp/ui_regress.js` | 64/64（新增 12 项：说明页 / 关于页 / fn-knock 分区 / 封禁刷新） |
+| CI on `v26.11.18` | success（含 Release 发布与资产上传） |
+| Release 资产复核 | `inspect_fpk --strict` PASS（373,843 字节，CI 重打包与本地 373,909 的差异属正常） |
 | `_test_update` / `_test_installer` / `_test_http` | 62 / 63 / 50 全过 |
 | `tmp/verify_notify.py` | 104/104 |
 
-## 顺带修掉的两处静默问题
+## 顺带修掉的三处静默问题
 
-1. **版本箭头 0×0**（见第 2 条）——只靠读代码看不出来，是量了 `getBoundingClientRect` 才发现的。
+1. **版本箭头 0×0**（见第 2 条）——只靠读代码看不出来，是量了
+   `getBoundingClientRect` 才发现的（`arrow=0.0x0.0`）。
 2. **升级遮罩的旋转图标是空 span**——DOM 里有元素、屏幕上什么都没有。
+3. **style.css 带 BOM**——CSS 闸门把 `:root` 当成未知选择器，20 个变量全被判成
+   「定义在别处」，看起来像整份令牌都写错了。去掉 BOM 即恢复。
 
-两处都属于「语法完全合法、静态检查全绿、只有真机上看才发现」的类型。
+三处都属于「语法完全合法、静态检查全绿、只有真机上量一次才发现」的类型。
+
+## 一处方法上的纠正
+
+这台设备上的无头 chromium，`--window-size` 小于约 500 时**布局仍按 500 CSS px 算**，
+截图只是把 500 宽的图裁到 390——拿到的是「被裁掉的桌面布局」，不是真正的手机布局。
+所以本版验收手机端一律走 CDP 的 `Emulation.setDeviceMetricsOverride`（真 390 CSS px、
+2 倍图），`--screenshot` 直出的手机图只当粗看。
