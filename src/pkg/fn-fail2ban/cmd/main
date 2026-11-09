@@ -1,0 +1,119 @@
+#!/bin/bash
+# ---------------------------------------------------------------------------
+# fail2ban · fnOS 原生应用
+# 主控脚本：start | stop | status
+#   status : 运行中 exit 0，未运行 exit 3
+# ---------------------------------------------------------------------------
+set -u
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=env.sh
+. "${HERE}/env.sh"
+
+f2b_log() {
+    [ -d "${F2B_VAR}" ] || return 0
+    echo "[$(date '+%F %T')] $*" >> "${F2B_LOGFILE}" 2>/dev/null
+}
+
+f2b_err() {
+    printf '%s\n' "$*" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+}
+
+read_pid() {
+    [ -f "${F2B_PIDFILE}" ] || return 1
+    local pid
+    pid="$(tr -cd '0-9' < "${F2B_PIDFILE}")"
+    [ -n "${pid}" ] || return 1
+    printf '%s' "${pid}"
+}
+
+is_running() {
+    local pid
+    pid="$(read_pid)" || return 1
+    kill -0 "${pid}" 2>/dev/null
+}
+
+do_start() {
+    mkdir -p "${F2B_VAR}" "${F2B_ETC}" "${F2B_HOME}" "${F2B_TMP}"
+
+    if is_running; then
+        f2b_log "already running (pid $(read_pid))"
+        return 0
+    fi
+
+    if [ ! -f "${F2B_TARGET}/bin/server.py" ]; then
+        f2b_err "应用文件缺失：${F2B_TARGET}/bin/server.py，请重新安装 Fail2ban 应用。"
+        return 1
+    fi
+
+    if ! command -v "${F2B_PYTHON}" >/dev/null 2>&1 && [ ! -x "${F2B_PYTHON}" ]; then
+        f2b_err "未检测到 Python3 运行时，请在 fnOS 终端执行 “apt install -y python3” 后重试。"
+        return 1
+    fi
+
+    rm -f "${F2B_READYFILE}" "${F2B_PIDFILE}"
+    # 统一网关 socket 必须清理，否则重启时会绑定失败
+    rm -f "${F2B_GATEWAY_SOCKET}" 2>/dev/null || true
+    f2b_log "starting fail2ban panel on port ${F2B_PORT}, gateway socket ${F2B_GATEWAY_SOCKET}"
+
+    (
+        cd "${F2B_TARGET}" || exit 1
+        nohup "${F2B_PYTHON}" -u "${F2B_TARGET}/bin/server.py" >>"${F2B_LOGFILE}" 2>&1 &
+        echo $! > "${F2B_PIDFILE}"
+    )
+
+    local i=0
+    while [ "${i}" -lt 40 ]; do
+        if [ -f "${F2B_READYFILE}" ]; then
+            f2b_log "panel ready (pid $(read_pid))"
+            return 0
+        fi
+        is_running || break
+        sleep 0.5
+        i=$((i + 1))
+    done
+
+    f2b_err "Fail2ban 管理面板启动失败，请查看日志：${F2B_LOGFILE}"
+    if is_running; then
+        kill "$(read_pid)" 2>/dev/null
+    fi
+    rm -f "${F2B_PIDFILE}"
+    return 1
+}
+
+do_stop() {
+    local pid
+    if pid="$(read_pid)"; then
+        kill "${pid}" 2>/dev/null
+        local i=0
+        while [ "${i}" -lt 20 ] && kill -0 "${pid}" 2>/dev/null; do
+            sleep 0.5
+            i=$((i + 1))
+        done
+        if kill -0 "${pid}" 2>/dev/null; then
+            kill -9 "${pid}" 2>/dev/null
+        fi
+        f2b_log "panel stopped (pid ${pid})"
+    fi
+    rm -f "${F2B_PIDFILE}" "${F2B_READYFILE}" "${F2B_GATEWAY_SOCKET}"
+    return 0
+}
+
+case "${1:-}" in
+    start)
+        do_start
+        ;;
+    stop)
+        do_stop
+        ;;
+    status)
+        if is_running; then
+            exit 0
+        fi
+        exit 3
+        ;;
+    *)
+        f2b_err "用法: $0 {start|stop|status}"
+        exit 1
+        ;;
+esac

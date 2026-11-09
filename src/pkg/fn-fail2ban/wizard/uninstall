@@ -1,0 +1,14 @@
+[
+  {
+    "stepTitle": "卸载选项",
+    "items": [
+      {
+        "type": "switch",
+        "field": "keep_config",
+        "label": "保留 Fail2ban 配置",
+        "initValue": "true",
+        "helpText": "保留时，系统 /etc/fail2ban 下的 jail 与过滤器配置不会被改动；关闭后本应用写入的 50-fn-fail2ban.local 与自定义过滤器将被移除（会先备份到应用数据目录）。"
+      }
+    ]
+  }
+]

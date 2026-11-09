@@ -1,0 +1,18 @@
+#!/bin/bash
+# 升级后：修复权限并做一次配置自检
+set -u
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=env.sh
+. "${HERE}/env.sh"
+
+mkdir -p "${F2B_VAR}" "${F2B_ETC}" "${F2B_HOME}" "${F2B_TMP}"
+
+chmod +x "${F2B_TARGET}/bin/server.py" 2>/dev/null
+find "${F2B_TARGET}/bin" -type f -name '*.py' -exec chmod 0644 {} \; 2>/dev/null
+
+if [ -f "${F2B_TARGET}/bin/server.py" ]; then
+    "${F2B_PYTHON}" "${F2B_TARGET}/bin/server.py" --bootstrap >/dev/null 2>&1 || true
+fi
+
+exit 0

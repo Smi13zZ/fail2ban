@@ -1,0 +1,78 @@
+[
+  {
+    "stepTitle": "运行环境",
+    "items": [
+      {
+        "type": "switch",
+        "field": "auto_install",
+        "label": "自动安装 Fail2ban",
+        "initValue": "true",
+        "helpText": "勾选后，若系统尚未安装 fail2ban，将在安装过程中通过 apt 自动安装（需要联网）。"
+      },
+      {
+        "type": "tips",
+        "helpText": "若系统已有 fail2ban，本应用不会覆盖 /etc/fail2ban/jail.conf，所有改动仅写入 jail.d/50-fn-fail2ban.local。"
+      }
+    ]
+  },
+  {
+    "stepTitle": "初始防护策略",
+    "items": [
+      {
+        "type": "switch",
+        "field": "enable_ssh_jail",
+        "label": "启用 SSH 防护 (sshd)",
+        "initValue": "true",
+        "helpText": "默认对 SSH 暴力破解进行封禁，建议开启。"
+      },
+      {
+        "type": "select",
+        "field": "default_bantime",
+        "label": "默认封禁时长",
+        "initValue": "1h",
+        "options": [
+          {
+            "label": "10 分钟",
+            "value": "10m"
+          },
+          {
+            "label": "30 分钟",
+            "value": "30m"
+          },
+          {
+            "label": "1 小时",
+            "value": "1h"
+          },
+          {
+            "label": "1 天",
+            "value": "1d"
+          },
+          {
+            "label": "1 周",
+            "value": "1w"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "field": "default_maxretry",
+        "label": "默认最大重试次数",
+        "initValue": "5",
+        "rules": [
+          {
+            "required": true,
+            "pattern": "^[0-9]+$",
+            "message": "请填写正整数"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "field": "default_ignoreip",
+        "label": "全局白名单 IP / 网段",
+        "initValue": "127.0.0.1/8 ::1",
+        "helpText": "多个条目用空格分隔，例如：192.168.1.0/24 10.0.0.5"
+      }
+    ]
+  }
+]

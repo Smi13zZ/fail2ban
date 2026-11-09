@@ -1,0 +1,15 @@
+{
+  ".url": {
+    "fn-fail2ban.main": {
+      "title": "Fail2ban",
+      "desc": "Fail2ban 原生客户端：可视化配置 Jail、查看封禁记录与全局策略",
+      "icon": "images/icon_{0}.png",
+      "type": "iframe",
+      "protocol": "",
+      "gatewayPrefix": "/app/fn-fail2ban",
+      "gatewaySocket": "app.sock",
+      "url": "/app/fn-fail2ban/",
+      "allUsers": false
+    }
+  }
+}

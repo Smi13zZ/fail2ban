@@ -1,0 +1,42 @@
+#!/bin/bash
+# ---------------------------------------------------------------------------
+# 卸载后回调：
+#   默认保留宿主机上的 fail2ban 配置，仅在向导中选择“清理”时才移除
+#   本应用写入的 jail.d/50-fn-fail2ban.local 与自定义过滤器。
+# ---------------------------------------------------------------------------
+set -u
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=env.sh
+. "${HERE}/env.sh"
+
+KEEP="${wizard_keep_config:-${keep_config:-true}}"
+
+if [ "${KEEP}" != "false" ]; then
+    exit 0
+fi
+
+BACKUP_DIR="${F2B_VAR}/uninstall-backup"
+mkdir -p "${BACKUP_DIR}" 2>/dev/null
+
+if [ -f "${F2B_MANAGED}" ]; then
+    cp -f "${F2B_MANAGED}" "${BACKUP_DIR}/" 2>/dev/null
+    rm -f "${F2B_MANAGED}"
+fi
+
+if [ -f "${F2B_VAR}/custom-filters.list" ]; then
+    while IFS= read -r fname; do
+        [ -n "${fname}" ] || continue
+        target="${F2B_SYS_ETC}/filter.d/${fname}.local"
+        if [ -f "${target}" ]; then
+            cp -f "${target}" "${BACKUP_DIR}/" 2>/dev/null
+            rm -f "${target}"
+        fi
+    done < "${F2B_VAR}/custom-filters.list"
+fi
+
+if command -v fail2ban-client >/dev/null 2>&1; then
+    fail2ban-client reload >/dev/null 2>&1 || true
+fi
+
+exit 0

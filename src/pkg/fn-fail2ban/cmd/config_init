@@ -1,0 +1,9 @@
+#!/bin/bash
+# 应用“设置”页面前置钩子，当前无需额外处理
+set -u
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=env.sh
+. "${HERE}/env.sh"
+
+exit 0

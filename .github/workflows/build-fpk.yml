@@ -1,0 +1,137 @@
+name: build-fpk
+
+# 打出 fnOS 安装包并发布：
+#   * 推 v* 标签            → 构建 + 上传 artifact；标签名等于 v + manifest 版本时才发 Release
+#   * 手动 workflow_dispatch → 只构建 + 上传 artifact
+#
+# 版本号以 src/pkg/fn-fail2ban/manifest 为准。发版流程：
+#   改 manifest 的 version → 改 CHANGELOG → commit → 打 v<version> 标签 → push 标签
+#
+# 只有「标签名 == v + manifest 里的 version」才发 Release，所以像 v26.11.5-ci1
+# 这样的临时标签只会出一个 artifact，不会碰到 Releases 页面。
+#
+# 为什么在 ubuntu 上打包而不是回家里的测试机：fnpack 只提供 Linux 版本，而
+# Windows 开发机上打出来的包会因为 cmd/ 丢掉可执行位、安装时报 10111。
+# CI 的打包步骤是 tools/make_package.py，和开发机经 fnos-test 跑的是同一份逻辑。
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-fpk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FNPACK_URL: https://static2.fnnas.com/fnpack/fnpack-1.2.3-linux-amd64
+  PYTHONUTF8: "1"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 读 manifest 元信息
+        id: meta
+        run: |
+          set -euo pipefail
+          M=src/pkg/fn-fail2ban/manifest
+          field() { awk -F= -v k="$1" '{n=$1; gsub(/[ \t]/,"",n); if(n==k){v=$2; gsub(/[ \t]/,"",v); print v}}' "$M"; }
+          ver="$(field version)"
+          app="$(field appname)"
+          plat="$(field platform)"
+          [ -n "${ver}" ] || { echo "manifest 里没有 version"; exit 1; }
+          [ -n "${app}" ] || { echo "manifest 里没有 appname"; exit 1; }
+          echo "version=${ver}" >> "${GITHUB_OUTPUT}"
+          echo "app=${app}" >> "${GITHUB_OUTPUT}"
+          echo "platform=${plat}" >> "${GITHUB_OUTPUT}"
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ] && [ "${GITHUB_REF_NAME:-}" = "v${ver}" ]; then
+            echo "publish=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "publish=false" >> "${GITHUB_OUTPUT}"
+          fi
+          echo "构建 ${app} ${ver}（platform=${plat}），发布=${GITHUB_REF_NAME:-无}"
+
+      - name: 闸门（结构 / 文档 / 编译 / i18n / CSS / 前端）
+        run: |
+          set -euo pipefail
+          # 每类问题单独跑一条，失败时 CI 页面上是哪一类一眼可见。
+          # 这些脚本与 tools/preflight.py 跑的是同一批，本地过了 CI 就会过。
+          python3 tools/check_structure.py
+          python3 tools/check_docs.py
+          python3 -m compileall -q src/pkg/fn-fail2ban/app/bin
+          python3 tools/check_i18n.py
+          python3 tools/check_css.py
+          python3 tools/check_web.py
+
+      - name: 安装 fnpack
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/fnpack "${FNPACK_URL}"
+          chmod +x /tmp/fnpack
+          sudo mv /tmp/fnpack /usr/local/bin/fnpack
+          fnpack --help >/dev/null
+          echo "fnpack 就绪"
+
+      - name: 打包并自检
+        run: |
+          set -euo pipefail
+          # 打包目录、权限、图标尺寸、九档图标、命名与解包自检都在脚本里，
+          # 开发机（经 fnos-test）与 CI 用的是同一份逻辑。
+          python3 tools/make_package.py
+          # 只处理这一版该产出的那个文件：output/ 里可能还躺着历史交付包，
+          # 用 *.fpk 通配会把它们一起传上去。
+          out="output/${{ steps.meta.outputs.app }}-${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.platform }}.fpk"
+          test -f "$out"
+          ls -l "$out"
+          sha256sum "$out"
+
+      - name: 生成发布说明
+        if: steps.meta.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          ver="${{ steps.meta.outputs.version }}"
+          # 从 CHANGELOG 里截出这一版的小节作为 Release 正文
+          awk -v v="${ver}" '
+            $0 ~ "^## "v"[ \t]*$" {flag=1; print "## Fail2ban "v; print ""; skip=1; next}
+            flag && skip && $0 ~ /^[ \t]*$/ {skip=0; next}
+            flag && /^## / {exit}
+            flag {print}
+          ' CHANGELOG.md > /tmp/release-body.md
+          printf '\n### 安装\n\n1. 下载下方 %s-%s-%s.fpk\n' \
+            "${{ steps.meta.outputs.app }}" "${ver}" "${{ steps.meta.outputs.platform }}" >> /tmp/release-body.md
+          printf '2. 飞牛 fnOS → 应用中心 → 手动安装 → 选择该文件\n' >> /tmp/release-body.md
+          printf '3. 已安装旧版本的，直接在应用中心点升级即可，已有配置与数据保留\n' >> /tmp/release-body.md
+          echo "----- release body -----"
+          cat /tmp/release-body.md
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: ${{ steps.meta.outputs.app }}-${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.platform }}
+          path: ${{ github.workspace }}/output/${{ steps.meta.outputs.app }}-${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.platform }}.fpk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 发布 Release
+        if: steps.meta.outputs.publish == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Fail2ban ${{ steps.meta.outputs.version }}
+          body_path: /tmp/release-body.md
+          files: ${{ github.workspace }}/output/${{ steps.meta.outputs.app }}-${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.platform }}.fpk
+          fail_on_unmatched_files: true
