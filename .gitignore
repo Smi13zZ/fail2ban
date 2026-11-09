@@ -1,0 +1,16 @@
+# 构建产物：安装包只通过 GitHub Release 分发，不进仓库
+output/*.fpk
+
+# 临时调试脚本与截图草稿
+tmp/
+
+# 历史版本截图留档：只保留当前版本的 image/v26xxx/
+image/archive/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db

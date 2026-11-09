@@ -1,0 +1,18 @@
+#!/bin/bash
+# 安装前检查：确认宿主机具备 Python3 运行时
+set -u
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=env.sh
+. "${HERE}/env.sh"
+
+if ! command -v python3 >/dev/null 2>&1 && [ ! -x /usr/bin/python3 ]; then
+    printf '%s\n' \
+        "未在系统中找到 Python3 运行时。" \
+        "请先在 fnOS 终端执行： apt update && apt install -y python3" \
+        "然后重新安装本应用。" \
+        > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+    exit 1
+fi
+
+exit 0

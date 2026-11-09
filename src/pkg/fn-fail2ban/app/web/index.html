@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>Fail2ban</title>
+<!-- 在样式之前定好主题，避免浅色用户先闪一下深色界面 -->
+<script>
+(function () {
+  try {
+    var saved = localStorage.getItem('f2b-theme') || 'auto';
+    var light = saved === 'light' || (saved === 'auto' && window.matchMedia &&
+      window.matchMedia('(prefers-color-scheme: light)').matches);
+    document.documentElement.dataset.theme = light ? 'light' : 'dark';
+  } catch (e) { /* 隐私模式下 localStorage 可能不可用，退回默认深色 */ }
+})();
+</script>
+<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- 首屏占位：等 /api/session 与 /api/meta 返回期间避免整屏空白 -->
+<div class="boot" id="bootSplash">
+  <div class="boot-card"><span class="spinner"></span><span data-i18n="common.booting">正在连接面板…</span></div>
+</div>
+
+<!-- 主界面（面板不再有登录页，打开即进入管理界面） -->
+<div class="app" id="app">
+  <div class="scrim" id="scrim"></div>
+
+  <aside class="sidebar" id="sidebar">
+    <nav class="nav" id="tabs">
+      <button data-view="dashboard" class="active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="1.8"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.8"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.8"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.8"/></svg>
+        <span data-i18n="nav.dashboard">概览</span>
+      </button>
+      <button data-view="jails">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7.5 3v5.5c0 4.3-3.1 7.6-7.5 9.2-4.4-1.6-7.5-4.9-7.5-9.2V6z"/></svg>
+        <span data-i18n="nav.jails">Jail 管理</span>
+      </button>
+      <button data-view="bans">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M6.2 6.2l11.6 11.6"/></svg>
+        <span data-i18n="nav.bans">封禁管理</span>
+        <span class="nav-badge" id="navBanCount"></span>
+      </button>
+      <button data-view="filters">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5h17l-6.6 7.6V19l-3.8-2.2v-4.2z"/></svg>
+        <span data-i18n="nav.filters">过滤器</span>
+      </button>
+      <button data-view="fnknock">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 10.5V7.8a4.5 4.5 0 0 1 9 0v2.7"/><rect x="4.5" y="10.5" width="15" height="9.5" rx="2.2"/><path d="M12 13.8v2.6"/></svg>
+        <span data-i18n="nav.fnknock">fnknock 联动</span>
+      </button>
+      <button data-view="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8M4 12h16"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+        <span data-i18n="nav.settings">设置</span>
+        <span class="nav-badge nav-alert" id="navUpdateDot" hidden></span>
+      </button>
+      <button data-view="logs">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12.5h6M9 16h6"/></svg>
+        <span data-i18n="nav.logs">运行日志</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <!-- 主题 / 语言并排图标按钮，收起时侧栏只剩图标 -->
+      <div class="foot-row">
+        <button class="icon-btn" id="btnTheme" title="切换主题" aria-label="切换主题">
+          <span id="themeIcon"></span>
+        </button>
+        <button class="icon-btn" id="btnLang" title="切换语言" aria-label="切换语言">
+          <span id="langIcon"></span>
+        </button>
+      </div>
+      <div class="ver-line" id="verLine" title="面板版本">
+        <span class="ver-ic" id="verIcon" aria-hidden="true"></span>
+        <span class="mono" id="verText">v—</span>
+      </div>
+      <!-- 桌面才显示（窄屏由样式隐藏），收起后侧栏变 62px 图标轨道 -->
+      <button type="button" class="icon-btn wide ghost collapse-btn" id="btnCollapse"
+              title="收起侧栏" aria-label="收起侧栏" aria-expanded="true" aria-controls="sidebar">
+        <span id="collapseIcon"></span>
+      </button>
+    </div>
+  </aside>
+
+  <div class="content">
+    <header class="topbar">
+      <button class="icon-btn" id="menuToggle" aria-label="打开菜单">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <div class="page-head">
+        <h1 id="pageTitle" data-i18n="nav.dashboard">概览</h1>
+        <span class="badge muted" id="svcBadge" role="status" aria-live="polite" data-i18n="dash.checking">检测中…</span>
+      </div>
+      <div class="spacer" style="flex:1"></div>
+      <div class="tools">
+        <button class="btn sm" id="btnReload" title="重新读取配置并生效" data-i18n="common.reload">重载配置</button>
+        <button class="btn sm" id="btnRefresh" data-i18n="common.refresh">刷新</button>
+      </div>
+    </header>
+
+    <main id="view"></main>
+  </div>
+</div>
+
+<!-- 编辑抽屉 -->
+<div class="drawer-mask" id="drawerMask"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+  <div class="drawer-head">
+    <h3 id="drawerTitle" data-i18n="common.edit">编辑</h3>
+    <div class="spacer" style="flex:1"></div>
+    <button class="btn sm ghost" id="drawerClose" aria-label="关闭">✕</button>
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+  <div class="drawer-foot" id="drawerFoot"></div>
+</aside>
+
+<!-- 一键升级遮罩：服务会在升级过程中停止，期间接口全部失败属正常 -->
+<div class="modal upoverlay" id="upOverlay" hidden>
+  <div class="upoverlay-box" role="dialog" aria-modal="true" aria-labelledby="upTitle">
+    <span class="upspin" id="upSpin" aria-hidden="true"></span>
+    <div class="uptitle" id="upTitle" data-i18n="update.upgrading">正在升级</div>
+    <div class="upstage" id="upStage"></div>
+    <div class="upprog-block" id="upProgBlock">
+      <div class="upprog"><span class="upprog-fill" id="upProgFill" style="width:0%"></span></div>
+      <div class="upprog-meta">
+        <span id="upProgBytes">—</span>
+        <span class="upmeta-pct" id="upProgPct"></span>
+      </div>
+    </div>
+    <div class="upkeep" id="upKeep" data-i18n="update.keepOpen">升级期间请勿关闭页面。</div>
+    <button type="button" class="btn sm" id="upReload" hidden data-i18n="update.reload">立即重新加载</button>
+  </div>
+</div>
+
+<div class="toast-host" id="toastHost" role="status" aria-live="polite"></div>
+
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

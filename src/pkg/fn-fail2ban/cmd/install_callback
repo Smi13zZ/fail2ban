@@ -1,0 +1,59 @@
+#!/bin/bash
+# ---------------------------------------------------------------------------
+# 安装后回调：
+#   1. 修正脚本执行权限
+#   2. （空位：面板已移除登录页，不再写入凭证）
+#   3. 按向导选择安装 / 启用系统 fail2ban
+#   4. 生成初始 jail 配置
+# ---------------------------------------------------------------------------
+set -u
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=env.sh
+. "${HERE}/env.sh"
+
+mkdir -p "${F2B_VAR}" "${F2B_ETC}" "${F2B_HOME}" "${F2B_TMP}"
+
+# --- 1. 权限 ---------------------------------------------------------------
+chmod +x "${F2B_TARGET}/bin/server.py" 2>/dev/null
+find "${F2B_TARGET}/bin" -type f -name '*.py' -exec chmod 0644 {} \; 2>/dev/null
+
+# --- 2. 登录凭证 -------------------------------------------------------------
+# 面板已不再提供登录页，安装时无需写入凭证；历史版本可能残留的
+# credentials.json 保持原样不删（回退旧版本时仍然可用）。
+
+# --- 3. fail2ban 本体 ------------------------------------------------------
+F2B_AUTO_INSTALL="${wizard_auto_install:-${auto_install:-true}}"
+
+if ! command -v fail2ban-client >/dev/null 2>&1; then
+    if [ "${F2B_AUTO_INSTALL}" = "true" ]; then
+        echo "正在安装 fail2ban，请稍候……" >&2
+        DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1 || true
+        if ! DEBIAN_FRONTEND=noninteractive apt-get install -y -qq fail2ban >/dev/null 2>&1; then
+            printf '%s\n' \
+                "自动安装 fail2ban 失败（可能是网络不可达或软件源不可用）。" \
+                "应用已安装，但你需要在 fnOS 终端手动执行：" \
+                "  apt update && apt install -y fail2ban" \
+                "完成后回到 Fail2ban 面板点击“重新检测”。" \
+                > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+        fi
+    else
+        echo "已跳过 fail2ban 自动安装，请在终端执行 apt install -y fail2ban。" >&2
+    fi
+fi
+
+if command -v systemctl >/dev/null 2>&1 && command -v fail2ban-client >/dev/null 2>&1; then
+    systemctl enable fail2ban >/dev/null 2>&1 || true
+    systemctl start fail2ban >/dev/null 2>&1 || true
+fi
+
+# --- 4. 初始 jail 配置 -----------------------------------------------------
+export F2B_BOOTSTRAP_IGNOREIP="${wizard_default_ignoreip:-${default_ignoreip:-127.0.0.1/8 ::1}}"
+export F2B_BOOTSTRAP_SSHD="${wizard_enable_ssh_jail:-${enable_ssh_jail:-true}}"
+export F2B_BOOTSTRAP_BANTIME="${wizard_default_bantime:-${default_bantime:-1h}}"
+export F2B_BOOTSTRAP_MAXRETRY="${wizard_default_maxretry:-${default_maxretry:-5}}"
+
+"${F2B_PYTHON}" "${F2B_TARGET}/bin/server.py" --bootstrap >/dev/null 2>&1 || \
+    echo "警告：初始 jail 配置生成失败，可稍后在面板中手动配置。" >&2
+
+exit 0

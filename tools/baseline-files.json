@@ -1,0 +1,31 @@
+{
+  "_comment": [
+    "cmd/ wizard/ config/ 与官方 fn-fail2ban 1.7.0 包逐字节比对的基线（只存 sha256，不含文件内容）。",
+    "inspect_fpk.py 用它核对交付包里的生命周期脚本有没有被意外改动：",
+    "这些文件是「生产机原地升级不改配置」的保证，任何字节变化都必须是有意的。",
+    "entries 里的 expected_diff 是明知且有意为之的差异（删登录页导致的向导变化），",
+    "出现在这份名单里只提示、不判失败；不在名单里的差异一律判失败。"
+  ],
+  "source": "fn-fail2ban 1.7.0 官方安装包 app 外层",
+  "files": {
+    "cmd/config_callback": "37c7f26da775e9cac990ec9a056edb3c47a2ee57194d0d79b034b94333a7f3e7",
+    "cmd/config_init": "04ef2b58a23264749ca7ad88b7dd6fe3dfef1d31f80777f6e053d551fa4283f9",
+    "cmd/env.sh": "b77e6d8f0c1c9bb875524474ee3ae1d39ebf8d8c0b4611a24af8f86188b7d17d",
+    "cmd/install_callback": "e777fffebd99b2f4514387fc95b13f99d2d02f7180d1b2c7f62f06b71b43d673",
+    "cmd/install_init": "59a568e85d9d6816d4bae182c0231a55d692f8fceeded8f0680763679a00e8db",
+    "cmd/main": "c77954028b858e3b1bb689e5a8071b9b6fbb30116d4730daa1a9fa39b6cb4f3d",
+    "cmd/uninstall_callback": "061fd8f2f6f6ef4c8f41928b3a8b2d0107482a589567287bd8893581d773fdc6",
+    "cmd/uninstall_init": "bc23fb7451b4dc1f589ad81c357b272b40cdde96c5485327d9bceedeade20b3a",
+    "cmd/upgrade_callback": "2b3eccbba9e6b1487d2338369174f01da98b788cdf29a3edeafce5deea5ad3c7",
+    "cmd/upgrade_init": "bed63d5056bb724b43ea16ba7be5e7daafec99bda0ef93f64db99b910a2115bf",
+    "config/privilege": "67fc8cb6eeab57f1e4868b2695e832de2c46b2168ff712406313d1e501a6de0c",
+    "config/resource": "e3566b3a06430868d71e9287dfd6c6c520a3da027aabea01951d407ee131dc2f",
+    "wizard/install": "45a7c2839af85d4d55b6ff116abac0d854e41ee318a5c67428e91530ef9437ea",
+    "wizard/uninstall": "364dd60f25dd5010c61e2a2dbbc4c334eba04c7967498d8988b9a2869a5b1de3"
+  },
+  "expected_diff": {
+    "cmd/config_callback": "删掉面板登录页后不再写入/重置面板凭证",
+    "cmd/install_callback": "删掉面板登录页后不再创建管理员账号",
+    "wizard/install": "向导去掉「管理面板账号」一步（少 2 个字段）"
+  }
+}

@@ -1,0 +1,19 @@
+#!/bin/bash
+# 卸载前：停止管理面板进程
+set -u
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=env.sh
+. "${HERE}/env.sh"
+
+if [ -f "${F2B_PIDFILE}" ]; then
+    pid="$(tr -cd '0-9' < "${F2B_PIDFILE}")"
+    if [ -n "${pid}" ]; then
+        kill "${pid}" 2>/dev/null
+        sleep 1
+        kill -9 "${pid}" 2>/dev/null
+    fi
+    rm -f "${F2B_PIDFILE}" "${F2B_READYFILE}"
+fi
+
+exit 0

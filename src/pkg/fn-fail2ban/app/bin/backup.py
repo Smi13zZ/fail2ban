@@ -1,0 +1,393 @@
+"""配置自动备份。
+
+把本应用托管的配置快照打包成 tar.gz，可写入 fnOS 存储空间（/vol1、/vol2 …），
+便于用户直接通过「文件管理」取走或归档。仅使用标准库。
+"""
+
+from __future__ import annotations
+
+import glob
+import io
+import json
+import os
+import socket
+import tarfile
+import threading
+import time
+
+import f2b
+import jailconf
+import notify
+import store
+
+SETTINGS_FILE = os.path.join(store.VAR_DIR, "backup.json")
+APP_FOLDER_NAME = "fn-fail2ban"
+BACKUP_SUBDIR = "backup"
+ARCHIVE_PREFIX = APP_FOLDER_NAME
+APPSHARE_NAME = "@appshare"
+CHECK_INTERVAL = 600          # 调度线程轮询间隔（秒）
+DEFAULT_KEEP = 10
+
+DEFAULT_SETTINGS = {
+    "enabled": False,
+    "directory": "",          # 空 = 应用数据目录
+    "intervalHours": 24,
+    "keep": DEFAULT_KEEP,
+    "includeNotifications": True,
+    "lastAttemptAt": 0,
+    "lastSuccessAt": 0,
+    "lastStatus": None,       # {"ok": bool, "message": str, "time": int, "name": str}
+}
+
+# 不允许作为备份目标的系统目录（防止误覆盖系统文件）
+FORBIDDEN_PREFIXES = ("/etc", "/usr", "/bin", "/sbin", "/lib", "/boot",
+                      "/dev", "/proc", "/sys", "/run", "/var/lib")
+
+
+# ---------------------------------------------------------------------------
+# 设置
+# ---------------------------------------------------------------------------
+
+def load_settings() -> dict:
+    stored = store.read_json(SETTINGS_FILE)
+    settings = dict(DEFAULT_SETTINGS)
+    if isinstance(stored, dict):
+        for key, value in stored.items():
+            if key in settings:
+                settings[key] = value
+    try:
+        settings["intervalHours"] = max(1, min(int(settings.get("intervalHours") or 24), 720))
+    except (TypeError, ValueError):
+        settings["intervalHours"] = 24
+    try:
+        settings["keep"] = max(1, min(int(settings.get("keep") or DEFAULT_KEEP), 200))
+    except (TypeError, ValueError):
+        settings["keep"] = DEFAULT_KEEP
+    return settings
+
+
+def _normalize_for_check(path: str) -> str:
+    """统一分隔符后再比较，便于在非 POSIX 平台上验证同一套规则。"""
+    return os.path.normpath(path).replace("\\", "/")
+
+
+def validate_directory(raw: str) -> tuple[str, str | None]:
+    """校验备份目录，返回 (规范化路径, 错误信息)。"""
+    text = (raw or "").strip()
+    if not text:
+        return "", None
+    if not os.path.isabs(text):
+        return text, "备份目录必须是绝对路径"
+
+    resolved = os.path.normpath(os.path.abspath(text))
+    if "/" in (_normalize_for_check(text), _normalize_for_check(resolved)):
+        return resolved, "不能直接使用根目录作为备份目录"
+
+    for candidate in (text, resolved):
+        normalized = _normalize_for_check(candidate)
+        for prefix in FORBIDDEN_PREFIXES:
+            if normalized == prefix or normalized.startswith(prefix + "/"):
+                return resolved, f"不允许使用系统目录 {prefix} 作为备份目标"
+    return resolved, None
+
+
+def save_settings(updates: dict) -> dict:
+    settings = load_settings()
+    if "enabled" in updates:
+        settings["enabled"] = bool(updates["enabled"])
+    if "includeNotifications" in updates:
+        settings["includeNotifications"] = bool(updates["includeNotifications"])
+    if "directory" in updates:
+        resolved, error = validate_directory(str(updates.get("directory") or ""))
+        if error:
+            raise ValueError(error)
+        # 与当前默认位置一致时存空串，保持“跟随默认”的语义。
+        # 面板会把已解析的路径预填进输入框，用户点一次保存就把它固化下来，
+        # 之后调整默认目录（例如应用改名）也带不动这些用户了。
+        settings["directory"] = "" if resolved == default_directory() else resolved
+    for key, low, high in (("intervalHours", 1, 720), ("keep", 1, 200)):
+        if key in updates:
+            try:
+                settings[key] = max(low, min(int(updates[key]), high))
+            except (TypeError, ValueError):
+                pass
+    store.ensure_dirs()
+    store.atomic_write_json(SETTINGS_FILE, settings)
+    return settings
+
+
+def volume_roots() -> list[str]:
+    """fnOS 的存储空间挂载点，形如 /vol1、/vol2。"""
+    return sorted(path for path in glob.glob("/vol[0-9]*") if os.path.isdir(path))
+
+
+def default_directory() -> str:
+    """默认备份目录：fnOS 共享目录下应用自己的 ``backup`` 子目录。
+
+    优先 ``/vol1/@appshare/fn-fail2ban/backup``，这样在「文件管理」里能直接看到；
+    没有 /vol1 时退到其它存储空间；一个存储空间都没有（例如本地开发环境）
+    才退回应用数据目录，避免在只读的根文件系统上凭空建目录。
+    """
+    volumes = volume_roots()
+    root = "/vol1" if "/vol1" in volumes else (volumes[0] if volumes else "")
+    if not root:
+        return os.path.join(store.VAR_DIR, BACKUP_SUBDIR)
+    return os.path.join(root, APPSHARE_NAME, APP_FOLDER_NAME, BACKUP_SUBDIR)
+
+
+def resolve_directory(settings: dict | None = None) -> str:
+    settings = settings or load_settings()
+    raw = (settings.get("directory") or "").strip()
+    return raw if raw else default_directory()
+
+
+def list_locations(roots: list[str] | None = None) -> list[dict]:
+    """列出可选的备份位置：默认位置 + fnOS 存储空间及其共享文件夹。"""
+    items = [{
+        "path": "",
+        "kind": "default",
+        "label": f"默认（{default_directory()}）",
+        "defaultDir": default_directory(),
+    }]
+    for volume in (volume_roots() if roots is None else roots):
+        if not os.path.isdir(volume):
+            continue
+        items.append({
+            "path": volume,
+            "kind": "volume",
+            "label": f"{volume}（存储空间根目录）",
+            "volume": volume,
+        })
+        try:
+            entries = sorted(os.listdir(volume))
+        except OSError:
+            continue
+        for entry in entries:
+            full = os.path.join(volume, entry)
+            if entry.startswith(".") or not os.path.isdir(full):
+                continue
+            items.append({
+                "path": full,
+                "kind": "share",
+                "label": f"{entry}  （位于 {volume}）",
+                "name": entry,
+                "volume": volume,
+            })
+    return items
+
+
+# ---------------------------------------------------------------------------
+# 备份
+# ---------------------------------------------------------------------------
+
+def _add_text(tar: tarfile.TarFile, arcname: str, text: str) -> None:
+    data = text.encode("utf-8")
+    info = tarfile.TarInfo(arcname)
+    info.size = len(data)
+    info.mtime = int(time.time())
+    info.mode = 0o600
+    tar.addfile(info, io.BytesIO(data))
+
+
+def _our_filters() -> list[str]:
+    paths = []
+    for name in store.read_custom_filters():
+        _, local = jailconf.filter_paths(name)
+        if os.path.isfile(local):
+            paths.append(local)
+    return paths
+
+
+def create_backup(reason: str = "manual") -> dict:
+    """生成一份备份快照并做轮转，返回结果描述。"""
+    settings = load_settings()
+    directory = resolve_directory(settings)
+    os.makedirs(directory, exist_ok=True)
+
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    name = f"{ARCHIVE_PREFIX}-{reason}-{stamp}.tar.gz"
+    path = os.path.join(directory, name)
+    partial = path + ".part"
+
+    info = f2b.info()
+    meta = {
+        "app": APP_FOLDER_NAME,
+        "appVersion": _app_version(),
+        "fail2banVersion": info.get("version"),
+        "reason": reason,
+        "createdAt": int(time.time()),
+        "hostname": socket.gethostname(),
+    }
+
+    try:
+        with tarfile.open(partial, "w:gz") as tar:
+            _add_text(tar, "manifest.json",
+                      json.dumps(meta, ensure_ascii=False, indent=2) + "\n")
+            if os.path.isfile(jailconf.MANAGED_FILE):
+                tar.add(jailconf.MANAGED_FILE,
+                        arcname=f"jail.d/{os.path.basename(jailconf.MANAGED_FILE)}")
+            for filter_path in _our_filters():
+                tar.add(filter_path, arcname=f"filter.d/{os.path.basename(filter_path)}")
+            if os.path.isfile(store.PREFS_FILE):
+                tar.add(store.PREFS_FILE, arcname="prefs.json")
+            if settings.get("includeNotifications") and os.path.isfile(notify.SETTINGS_FILE):
+                tar.add(notify.SETTINGS_FILE, arcname="notifications.json")
+        os.replace(partial, path)
+    except BaseException:
+        try:
+            os.unlink(partial)
+        except OSError:
+            pass
+        raise
+
+    removed = prune(settings)
+    size = os.path.getsize(path)
+    result = {
+        "ok": True,
+        "name": name,
+        "path": path,
+        "size": size,
+        "removed": removed,
+        "message": f"已备份到 {directory}",
+        # language-neutral result fields; the panel renders these itself so the
+        # English UI never shows the Chinese message above
+        "resultKind": "backedUp",
+        "directory": directory,
+        "time": int(time.time()),
+    }
+    _record(result)
+    return result
+
+
+def _app_version() -> str:
+    manifest = os.path.join(os.path.dirname(store.APP_DIR.rstrip("/")), "manifest")
+    try:
+        with open(manifest, "r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                if line.startswith("version"):
+                    return line.partition("=")[2].strip()
+    except OSError:
+        pass
+    return "unknown"
+
+
+def _record(result: dict) -> None:
+    settings = load_settings()
+    settings["lastAttemptAt"] = int(time.time())
+    settings["lastStatus"] = {
+        "ok": bool(result.get("ok")),
+        "message": result.get("message") or "",
+        "name": result.get("name") or "",
+        "time": int(time.time()),
+    }
+    if result.get("ok"):
+        settings["lastSuccessAt"] = int(time.time())
+    store.atomic_write_json(SETTINGS_FILE, settings)
+
+
+def record_failure(message: str) -> None:
+    _record({"ok": False, "message": message})
+
+
+def list_backups(settings: dict | None = None) -> list[dict]:
+    directory = resolve_directory(settings)
+    items = []
+    for path in glob.glob(os.path.join(directory, f"{ARCHIVE_PREFIX}-*.tar.gz")):
+        try:
+            stat = os.stat(path)
+        except OSError:
+            continue
+        items.append({
+            "name": os.path.basename(path),
+            "size": stat.st_size,
+            "mtime": int(stat.st_mtime),
+        })
+    items.sort(key=lambda item: item["mtime"], reverse=True)
+    return items
+
+
+def find_backup(name: str) -> str | None:
+    """安全地按文件名定位备份，拒绝任何路径穿越。"""
+    safe = (name or "").strip()
+    # 只接受纯文件名：带分隔符或 .. 的输入一律拒绝，不做静默修正
+    if not safe or safe != os.path.basename(safe) or safe in (".", ".."):
+        return None
+    if not safe.startswith(f"{ARCHIVE_PREFIX}-") or not safe.endswith(".tar.gz"):
+        return None
+    path = os.path.join(resolve_directory(), safe)
+    return path if os.path.isfile(path) else None
+
+
+def delete_backup(name: str) -> bool:
+    path = find_backup(name)
+    if not path:
+        return False
+    try:
+        os.unlink(path)
+        return True
+    except OSError:
+        return False
+
+
+def prune(settings: dict | None = None) -> int:
+    settings = settings or load_settings()
+    try:
+        keep = max(1, min(int(settings.get("keep") or DEFAULT_KEEP), 200))
+    except (TypeError, ValueError):
+        keep = DEFAULT_KEEP
+    removed = 0
+    for item in list_backups(settings)[keep:]:
+        path = find_backup(item["name"])
+        if not path:
+            continue
+        try:
+            os.unlink(path)
+            removed += 1
+        except OSError:
+            pass
+    return removed
+
+
+# ---------------------------------------------------------------------------
+# 调度
+# ---------------------------------------------------------------------------
+
+class Scheduler(threading.Thread):
+    """按设定间隔触发自动备份；关闭时只休眠，不做任何事。"""
+
+    daemon = True
+
+    def __init__(self):
+        super().__init__(name="f2b-backup-scheduler")
+        self._stop = threading.Event()
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def run(self) -> None:
+        # 启动后先等一轮，避免服务重启时立刻产生备份
+        if self._stop.wait(60):
+            return
+        while not self._stop.is_set():
+            try:
+                self.tick()
+            except Exception:  # noqa: BLE001 - 调度线程不应因异常退出
+                pass
+            self._stop.wait(CHECK_INTERVAL)
+
+    def tick(self) -> None:
+        settings = load_settings()
+        if not settings.get("enabled"):
+            return
+        try:
+            interval = max(1, int(settings.get("intervalHours") or 24)) * 3600
+        except (TypeError, ValueError):
+            interval = 24 * 3600
+        last = max(int(settings.get("lastAttemptAt") or 0),
+                   int(settings.get("lastSuccessAt") or 0))
+        if time.time() - last < interval:
+            return
+        try:
+            create_backup("auto")
+        except (OSError, ValueError) as exc:
+            record_failure(f"自动备份失败：{exc}")

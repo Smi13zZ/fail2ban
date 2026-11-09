@@ -1,0 +1,7 @@
+{
+  "defaults": {
+    "run-as": "root"
+  },
+  "username": "fn-fail2ban",
+  "groupname": "fn-fail2ban"
+}
