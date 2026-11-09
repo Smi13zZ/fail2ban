@@ -66,6 +66,39 @@ def manifest_fields(raw):
     return fields
 
 
+def manifest_shape(raw):
+    """检查 manifest 的**行结构**，返回问题列表。
+
+    应用中心按行读 manifest：一行一个「键 = 值」。值里出现换行会把后面那半截
+    变成一行只有文本、没有键的裸行 —— 解析器跳过它，changelog 就只剩后半段；
+    更糟的是安装器会判定 manifest 不合法，连卸载都会被拒绝。
+
+    历史上 changelog 堆到 13 KB，fnpack 打包时折了行，就是这种形状。
+    """
+    problems = []
+    for index, line in enumerate(raw.decode("utf-8", "replace").splitlines(), 1):
+        if not line.strip():
+            continue
+        stripped = line.lstrip()
+        # 值被折行的典型形状：折出来的那半截自己以 # 开头（changelog 正文里含有
+        # 行内代码或话题标签），于是它看起来像一条注释，能躲过下面的结构检查。
+        # 用长度兜住这一类：manifest 一行从来不该这么长。
+        if "=" in line and not stripped.startswith("#"):
+            if len(line) > 8192:
+                problems.append("第 %d 行有 %d 字节，值里很可能混进了换行"
+                                % (index, len(line)))
+            continue
+        # 注释只允许出现在文件前部（注释掉的配置项）。出现在 changelog 之后、
+        # 且长度可观的「注释」，几乎一定是折行折出来的半截值。
+        if stripped.startswith("#"):
+            if index > 16 and len(line) > 300:
+                problems.append("第 %d 行是 %d 字节的注释行，值里很可能混进了换行"
+                                % (index, len(line)))
+            continue
+        problems.append("第 %d 行缺少「键 = 值」结构：%s" % (index, line[:60]))
+    return problems
+
+
 def newest_fpk():
     found = sorted(glob.glob(os.path.join(G.ROOT, "output", "*.fpk")),
                    key=os.path.getmtime, reverse=True)
@@ -133,7 +166,14 @@ def main(argv=None):
 
     manifest = {}
     if "manifest" in members:
-        manifest = manifest_fields(outer.extractfile("manifest").read())
+        manifest_raw = outer.extractfile("manifest").read()
+        manifest = manifest_fields(manifest_raw)
+        # 行结构先查：值里混进换行会让安装器判 manifest 不合法，
+        # 表现是「连卸载都被拒」，而不是任何一条能看懂的报错。
+        shape_problems = manifest_shape(manifest_raw)
+        if shape_problems:
+            for problem in shape_problems:
+                report.fail("manifest", "行结构被破坏：%s" % problem)
         version = manifest.get("version", "")
         print("  manifest：%s %s / platform %s / service_port %s"
               % (manifest.get("appname", "?"), version or "（缺 version）",
