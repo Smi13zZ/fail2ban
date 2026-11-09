@@ -37,6 +37,7 @@
 | 26.11.2 | 212,060 | 面板内图标换成自身资源（修豆腐块） |
 | 26.11.3 | 266,028 | i18n 中英文全量切换、主题图标按钮、删概览标题行、侧栏只留应用名 |
 | 26.11.4 | 291,407 | 新黑白盾牌九档图标、删侧栏品牌行、表格固定列宽、排序独立控件；顺带修 3 个缺陷 |
+| **26.11.18** | **373,692** | 界面收口：设置页新增「说明」分区（20 条路径 + 复制），按归属分面板 / fail2ban 系统文件 / 敲门联动三卡；「关于」改为产品介绍 + 五项键值；侧栏「运行日志」→「日志」并移到设置之前、「fnknock 联动」→「fn-knock 联动」；fn-knock 联动页拆成六块标签条（封禁方式 / 同步 / 连接 / 运行状态 / 黑名单 / 联动日志）；更新页手机端排布与升级遮罩重做（两种进度形态、补读秒图标）；手机端原生 select 改为底部选择条；封禁管理去掉重复刷新按钮；提示条去掉成功/提醒的彩色描边；顺带修版本箭头 0×0 |
 | **26.11.17** | **364,158** | 一键升级真正跑通：改用 install-local（uninstall 被拒、install-fpk 对已装应用无效），升级文件搬到卸载不清的位置（@apphome），修 .fpk 被当 gzip 打开、manifest changelog 折行两处校验自伤；更新页改成整页一张卡片；开发者信息与应用中心数据库同步 | 
 | **26.11.10** | **368,640** | 更新页改成整页一张卡片：卡片头带「打开发布页面」，版本对比 + 状态条（右侧两个按钮）+ 限高滚动更新说明 + 安装包清单 + 仓库/检查时间/发布时间；无新版本时一键更新不渲染；修「检查于 {t}」占位符与本地版本高于线上时的显示 | 
 | **26.11.9** | **366,940** | 应用信息与发布渠道：开发者/发布者改为 Smi1ezZ、主页指向仓库；应用中心数据库（PostgreSQL appcenter.app）版本与作者同步；GitHub 仓库上线并发布 v26.11.8/v26.11.9；更新页拿不到包大小时显示「大小未知」而非 0 B | 
@@ -44,8 +45,8 @@
 | **26.11.6** | **365,449** | 设置页重做：侧栏十项收成七项，通知 / 存储 / 更新 / 全局设置合并为一个设置页，页内 8 个分区（面板 / 外观 / 防护策略 / 通知 / 备份 / 存储 / 更新 / 关于），深链 `#settings/<tab>` + 旧地址重定向；新增界面语言 / 侧栏布局 / 表格密度三项服务端偏好；卡片按钮统一 .card-head / .card-foot 排版；备份清单改定宽表 | 
 | **26.11.5** | **357,966** | 通知渠道 7→11 + 元数据驱动 + 密钥打码 + 双语推送 + 投递记录；新增存储页与清理；新增版本检查与一键更新；8 道工程闸门 + CI 打包发布 |
 
-**当前交付**：`output/fn-fail2ban-26.11.17-all.fpk`（364,158 字节）。**下一个版本号 26.11.18**。
-`report/README-26.11.17.md` 是当前版本的说明；`report/README-26.11.10.md` 是更新页那一版；`report/README-26.11.9.md` 是上一版；`report/README-26.11.7.md` 是侧栏左下角那一版；`report/README-26.11.6.md` 是设置页重做的说明，`report/SPEC-26.11.6-设置页重构.md` 是对应的施工图；26.11.5 的说明与施工图在 `report/README-26.11.5.md`、`report/UPGRADE-PLAN-26.11.5.md`。
+**当前交付**：`output/fn-fail2ban-26.11.18-all.fpk`（373,692 字节）。**下一个版本号 26.11.19**。
+`report/README-26.11.18.md` 是当前版本的说明；`report/README-26.11.17.md` 是一键升级那一版；`report/README-26.11.10.md` 是更新页那一版；`report/README-26.11.9.md` 是上一版；`report/README-26.11.7.md` 是侧栏左下角那一版；`report/README-26.11.6.md` 是设置页重做的说明，`report/SPEC-26.11.6-设置页重构.md` 是对应的施工图；26.11.5 的说明与施工图在 `report/README-26.11.5.md`、`report/UPGRADE-PLAN-26.11.5.md`。
 
 ## 四、包结构与构建
 
@@ -350,3 +351,58 @@ appcenter-cli install-local -d <解包目录> -e <env文件> -v 1 -a yes
 install-local 装完后，应用中心拉起服务偶尔报 `11000`（启动握手超时），此时新版本
 其实已装好。脚本里有「直接用 `/var/apps/<app>/cmd/main start` 兜底」的分支，
 但**这条分支还没被真正走到过**（验证时都是手工启动的）。下次真机升级时要盯一眼。
+
+## 十一、26.11.18 的界面契约（新增分区 / 分区标签 / 三种弹层）
+
+### 设置页分区（9 个，顺序即标签条顺序）
+
+`panel / appearance / policy / notify / backup / storage / update / guide / about`
+
+`guide`（说明）在 `update` 与 `about` 之间：它是查阅性质的位置清单，
+不夹在会改配置的分区中间。新增分区时必须同时改三处，漏一处就是「有标签没内容」：
+`SET_TABS`、`loadSettingsTab()` 的数据拉取、`settingsTabHtml()` 的分支。
+
+### 页面内的分区标签条（两处共用一套样式）
+
+设置页与 fn-knock 联动页都用 `.workbar` + `data-*-tab` 委托：
+
+- 设置页：`<button data-set-tab="id">` → `setSettingsTab(id)`；
+- fn-knock：`<button data-fnk-tab="id">` → `setFnkTab(id)`，分区是
+  `mode / sync / conn / status / list / log`。
+
+两者都**只重绘本页**，不重进视图。fn-knock 的「黑名单」分区数据按需拉取：
+不在那一块时不发 `/api/fnknock/blacklist`。
+
+**动态 i18n key 的前缀必须放变量里**：`t('fnk.tab.' + id)` 会被 i18n 闸门
+当成「引用了不存在的 key fnk.tab.」而 FAIL；写成 `var FNK_TAB_KEY = 'fnk.tab.'`
+再 `t(FNK_TAB_KEY + id)` 就与 `set.tab.` 同一个写法、闸门通过。
+
+### 手机端选择弹层
+
+原生 `<select>` 在手机上弹的是系统列表，与面板不是一套。做法是在
+`document` 上以捕获阶段拦 `mousedown` / `touchstart`，只对「单选、未禁用」的
+`select` 生效，打开 `#pickerMask`。选中后 `select.value = v` 再
+`dispatchEvent(new Event('change', {bubbles:true}))` —— 既有 `onChange` 全部照旧，
+**不需要为每个下拉各写一份手机端逻辑**（这是这套做法的全部理由）。
+
+### 三条「看起来有、其实没有」的坑
+
+1. **只有 `viewBox` 的 SVG 在 flex 里量出 0×0**。版本对比中间那个箭头就是这样，
+   从上线起就没显示过。凡是 JS 拼进去的 SVG，样式里必须有显式的宽高
+   （`.btn svg` 只给了 `flex: 0 0 auto`，不够）。
+2. **`<span class="upspin"></span>` 是空的**。样式按 `.upspin svg` 定尺寸与动画，
+   没有 SVG 就什么都不画。现在 `openUpOverlay()` 里按 `!spin.querySelector('svg')`
+   注入一次，不重复注入。
+3. **CSS 文件带 BOM 会让 `check_css.py` 把 `:root` 当成未知选择器**，
+   于是 20 个变量全被判成「定义在别处」。写 CSS 一律 UTF-8 无 BOM + LF。
+
+### 弹层三种形态（不要混用）
+
+| 用途 | 类名 | 位置 |
+| --- | --- | --- |
+| 编辑表单 | `.drawer` + `.drawer-mask` | 桌面右侧滑出，手机全宽 |
+| 手机选择 | `.picker-mask` + `.picker-sheet` | 底部升起，点遮罩或「取消」关闭 |
+| 一键升级 | `.upoverlay` + `.upoverlay-box` | 居中，不可关闭，直到面板重新应答 |
+
+Esc 键的优先级：**选择条 > 抽屉**。选择条盖在页面之上时先关它，
+别把下面抽屉一起关掉（`pickerCtx` 非空即优先）。

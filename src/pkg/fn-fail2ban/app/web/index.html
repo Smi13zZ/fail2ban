@@ -52,16 +52,16 @@
       </button>
       <button data-view="fnknock">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 10.5V7.8a4.5 4.5 0 0 1 9 0v2.7"/><rect x="4.5" y="10.5" width="15" height="9.5" rx="2.2"/><path d="M12 13.8v2.6"/></svg>
-        <span data-i18n="nav.fnknock">fnknock 联动</span>
+        <span data-i18n="nav.fnknock">fn-knock 联动</span>
+      </button>
+      <button data-view="logs">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12.5h6M9 16h6"/></svg>
+        <span data-i18n="nav.logs">日志</span>
       </button>
       <button data-view="settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8M4 12h16"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
         <span data-i18n="nav.settings">设置</span>
         <span class="nav-badge nav-alert" id="navUpdateDot" hidden></span>
-      </button>
-      <button data-view="logs">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12.5h6M9 16h6"/></svg>
-        <span data-i18n="nav.logs">运行日志</span>
       </button>
     </nav>
 
@@ -120,20 +120,36 @@
 </aside>
 
 <!-- 一键升级遮罩：服务会在升级过程中停止，期间接口全部失败属正常 -->
-<div class="modal upoverlay" id="upOverlay" hidden>
+<div class="upoverlay" id="upOverlay" hidden>
   <div class="upoverlay-box" role="dialog" aria-modal="true" aria-labelledby="upTitle">
+    <!-- 旋转图标由 app.js 注入（样式按 .upspin svg 定尺寸与动画） -->
     <span class="upspin" id="upSpin" aria-hidden="true"></span>
     <div class="uptitle" id="upTitle" data-i18n="update.upgrading">正在升级</div>
     <div class="upstage" id="upStage"></div>
+    <!-- 进度区两种形态共用同一块固定高度：下载阶段有真实字节数 → 进度条 + 大小 + 百分比；
+         其余阶段没有可测总量 → 不画进度条，只在同一块空间里显示「准备中…」，不假装有百分比。 -->
     <div class="upprog-block" id="upProgBlock">
-      <div class="upprog"><span class="upprog-fill" id="upProgFill" style="width:0%"></span></div>
-      <div class="upprog-meta">
-        <span id="upProgBytes">—</span>
-        <span class="upmeta-pct" id="upProgPct"></span>
+      <div class="upprog-track" id="upProgTrack" hidden>
+        <div class="upprog"><span class="upprog-fill" id="upProgFill" style="width:0%"></span></div>
+        <div class="upprog-meta">
+          <span class="upmeta-size" id="upProgBytes"></span>
+          <span class="upmeta-pct" id="upProgPct"></span>
+        </div>
       </div>
+      <div class="upprog-ready" id="upProgReady" data-i18n="update.stagePreparing">准备中…</div>
     </div>
     <div class="upkeep" id="upKeep" data-i18n="update.keepOpen">升级期间请勿关闭页面。</div>
     <button type="button" class="btn sm" id="upReload" hidden data-i18n="update.reload">立即重新加载</button>
+  </div>
+</div>
+
+<!-- 手机端选择器：原生 <select> 在手机上弹出的是系统自带列表，主题、触控尺寸与
+     桌面端完全是两套东西。手机上改用它下面的底部选择条，与面板其它部分同一套样式。 -->
+<div class="picker-mask" id="pickerMask" hidden>
+  <div class="picker-sheet" role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
+    <div class="picker-title" id="pickerTitle"></div>
+    <div class="picker-list" id="pickerList"></div>
+    <button type="button" class="btn picker-cancel" id="pickerCancel" data-i18n="common.cancel">取消</button>
   </div>
 </div>
 

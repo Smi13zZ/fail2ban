@@ -29,9 +29,10 @@ PushPlus, WxPusher, Telegram, Slack and a custom webhook. Subscribe per event (b
 unban, service down, service recovered); messages are bilingual (Chinese and English).
 Every push leaves a delivery record, success or failure, with the reason attached.
 
-**fnknock integration** — shares the ban list with a companion block-list service:
+**fn-knock integration** — shares the ban list with a companion block-list service:
 addresses banned by fail2ban are pushed into it, and ban actions can be delegated to it.
-The required filter and action file are installed automatically.
+The required filter and action file are installed automatically. The page is split into
+blocks — ban method, sync, connection, status, blocklist and log — one at a time.
 
 **Storage** — how much the data directory and backups take, with one-click cleanup of
 logs, old backups or both. Logs are truncated in place while the service is running, so
@@ -41,8 +42,13 @@ nothing that is still being written is lost.
 The downloaded package is verified before installing, and a failure rolls back to the
 previous version.
 
-**Settings** — theme (system / dark / light), interface language (Chinese / English),
-start on boot, default ban parameters, allow list, configuration backup and restore.
+**Settings** — ten sections: panel behaviour, appearance (theme, language, sidebar,
+table density), protection policy, notifications, backup, storage, update, guide and about.
+
+**Guide** — every location the panel writes to, on one page: its own web, data, config,
+backup and log directories, the fail2ban system files with their read order, and the
+action and filter written by the fn-knock integration. Each path can be copied in one
+click, and the rows marked as system-owned are explicitly not the panel's to change.
 
 ## Highlights
 
@@ -88,5 +94,5 @@ The host needs fail2ban. The install wizard offers to install it through `apt`
 
 ## Version
 
-Current version 26.11.8. See [CHANGELOG](CHANGELOG.md) for the change history and
+Current version 26.11.18. See [CHANGELOG](CHANGELOG.md) for the change history and
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the build and verification workflow.

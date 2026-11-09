@@ -102,6 +102,8 @@
     fnknock: null,
     fnkBlacklist: null,
     fnkOpts: { page: 1, limit: 20, search: '' },
+    // 与敲门的联动拆成六块，一次只看一块（mode | sync | conn | status | list | log）
+    fnkTab: 'mode',
     // 投递记录：status 是筛选条件（all | ok | fail），data 是接口返回的 {items,total,kept}
     deliv: { status: 'all', data: null },
     // 存储页：report 是 /api/storage 的原样返回
@@ -135,12 +137,26 @@
     get logs() { return t('nav.logs'); }
   };
 
-  // 设置页的 8 个分区。id 是路由键，文案在 set.tab.<id> 下。
-  var SET_TABS = ['panel', 'appearance', 'policy', 'notify', 'backup', 'storage', 'update', 'about'];
+  // 设置页的分区。id 是路由键，文案在 set.tab.<id> 下。
+  // 「说明」放最后第二位：它列的是文件位置与端口，属于查阅性质的参考页，
+  // 不适合夹在会改配置的分区中间。
+  var SET_TABS = ['panel', 'appearance', 'policy', 'notify', 'backup', 'storage',
+    'update', 'guide', 'about'];
   var SET_TAB_KEY = 'set.tab.';
 
   function setTabLabel(id) {
     return t(SET_TAB_KEY + id);
+  }
+
+  // fn-knock 联动页的分区：与设置页同一套标签条，一次只展开一块。
+  var FNK_TABS = ['mode', 'sync', 'conn', 'status', 'list', 'log'];
+
+  // 前缀单独放变量里，与 set.tab. 同一写法：i18n 闸门按字面量核对引用，
+  // 直接写 'fnk.tab.' + id 会被当成「引用了不存在的 key fnk.tab.」。
+  var FNK_TAB_KEY = 'fnk.tab.';
+
+  function fnkTabLabel(id) {
+    return t(FNK_TAB_KEY + id);
   }
 
   // 旧地址 → 新地址。老书签和浏览器历史里还留着一整页的 hash，
@@ -641,6 +657,11 @@
     return state.view === 'settings' && state.setTab === tab;
   }
 
+  // fn-knock 页同理：数据回来时要判断那块还在不在当前分区上，否则界面不动。
+  function inFnkTab(tab) {
+    return state.view === 'fnknock' && state.fnkTab === tab;
+  }
+
   // 地址栏形如 #settings/notify；其余视图仍是 #jails。
   function viewHash(view, tab) {
     if (view !== 'settings') return view;
@@ -669,6 +690,20 @@
     }).catch(function (err) {
       if (state.view === 'settings' && state.setTab === id) toast(localizeErr(err), 'err');
     });
+  }
+
+  // fn-knock 页内切分区：与设置页同样的做法，只重绘这一页，不重进视图。
+  // 「黑名单」那块的数据按需拉，切过去才发请求。
+  function setFnkTab(id) {
+    if (FNK_TABS.indexOf(id) < 0) id = 'mode';
+    if (state.fnkTab === id) return;
+    state.fnkTab = id;
+    renderFnknock();
+    if (id === 'list') {
+      loadFnkBlacklist().then(function () {
+        if (state.view === 'fnknock' && state.fnkTab === 'list') renderFnknock();
+      }).catch(function (err) { toast(localizeErr(err), 'err'); });
+    }
   }
 
   // 从 hash 解析出 { view, tab }。旧 hash 在这里一次性重定向掉。
@@ -771,10 +806,9 @@
         viewTasks = loadSettingsTab(state.setTab);
         break;
       case 'fnknock':
-        viewTasks = [
-          api('fnknock').then(function (d) { state.fnknock = d; }),
-          loadFnkBlacklist()
-        ];
+        viewTasks = [api('fnknock').then(function (d) { state.fnknock = d; })];
+        // 黑名单分页数据只在「黑名单」那块才需要，别的分区不用先拉一次
+        if (state.fnkTab === 'list') viewTasks.push(loadFnkBlacklist());
         break;
       case 'logs':
         viewTasks = [loadLogs(), api('overview').then(function (d) { state.overview = d; })];
@@ -1556,8 +1590,9 @@
     var host = $('#view');
     var active = state.jails.filter(function (j) { return j.active; });
     var all = state.bans.jail === BAN_ALL;
-    var html = ("<div class=\"view-head\"><h2>" + t('nav.bans') + "</h2><div class=\"spacer\"></div>") +
-      ("<button class=\"btn\" data-act=\"refresh\">" + t('common.refresh') + "</button></div>");
+    // 顶栏已经有「刷新」，这一行不再重复放一个同样的按钮：
+    // 同一屏里两个「刷新」会让人分不清哪个刷新的是哪个范围。
+    var html = '<div class="view-head"><h2>' + t('nav.bans') + '</h2></div>';
 
     if (!active.length && !all) {
       host.innerHTML = html + '<div class="card"><div class="empty">' +
@@ -2059,6 +2094,15 @@
       }));
     } else if (tab === 'about') {
       needSettings();
+    } else if (tab === 'guide') {
+      // 「说明」列的是真实路径与端口：settings 给写入位置，fnknock 给敲门那几张
+      needSettings();
+      tasks.push(api('fnknock').then(function (d) { state.fnknock = d; }));
+      if (!state.overview) {
+        tasks.push(api('service').then(function (info) {
+          state.overview = { fail2ban: info, jails: [], summary: {}, system: {} };
+        }));
+      }
     }
     return tasks;
   }
@@ -2098,6 +2142,7 @@
       case 'backup': return renderSetBackup();
       case 'storage': return renderStorage(true);
       case 'update': return renderUpdate(true);
+      case 'guide': return renderSetGuide();
       case 'about': return renderSetAbout();
       default: return renderSetPanel();
     }
@@ -2201,19 +2246,103 @@
 
   function renderSetAbout() {
     var meta = state.meta || {};
-    var settings = state.settings || {};
-    var version = (meta.app && meta.app.version) || (state.session && state.session.version) || '—';
+    var app = meta.app || {};
     var paths = meta.paths || {};
-    var body = '<div class="card">' + cardHead(t('set.aboutTitle')) + '<dl class="kv">' +
-      kv(t('set.versionLabel'), '<span class="mono">' + esc(version) + '</span>') +
-      kv(t('set.managedFile'), '<span class="mono">' + esc(settings.managedFile || '—') + '</span>') +
-      kv(t('set.readOrder'), '<span class="mono">' +
+    var info = (state.overview && state.overview.fail2ban) || {};
+    var version = app.version || (state.session && state.session.version) || '—';
+    var repo = 'https://github.com/Smi13zZ/fail2ban';
+    var body = '<div class="card">' + cardHead(t('set.aboutTitle')) +
+      '<p class="dim about-desc">' + esc(t('set.aboutDesc')) + '</p>' +
+      '<dl class="kv">' +
+      kv(t('set.versionLabel'), '<span class="mono">v' + esc(version) + '</span>') +
+      kv(t('set.aboutEngine'), '<span class="mono">' + esc(info.version || '—') + '</span>') +
+      kv(t('set.aboutPorts'), '<span class="mono">' + esc(app.port || '—') + '</span>') +
+      kv(t('set.aboutRepo'), '<a class="mono" href="' + esc(repo) +
+        '" target="_blank" rel="noopener noreferrer">Smi13zZ/fail2ban</a>') +
+      kv(t('set.aboutLicense'), 'MIT') +
+      '</dl>' +
+      '<div class="help">' + esc(t('set.aboutHint')) + '</div>' +
+      '</div>';
+    return body;
+  }
+
+  /* ------------------------------------------------------ 设置 · 说明 */
+
+  // 一条路径行：标签 + 等宽路径 + 复制按钮。路径可能很长（@appdata 下多层目录），
+  // 单独占一行而不是挤在 dt/dd 里，窄屏才不会把目录名折成两三段。
+  function pathRow(label, value, note) {
+    if (!value) return '';
+    return '<div class="pathrow">' +
+      '<div class="pathrow-k">' + esc(label) +
+      (note ? '<span class="pathrow-note">' + esc(note) + '</span>' : '') + '</div>' +
+      '<div class="pathrow-v"><span class="mono">' + esc(value) + '</span>' +
+      '<button type="button" class="btn sm" data-act="copy-path" data-path="' +
+      esc(value) + '">' + t('set.guideCopy') + '</button></div></div>';
+  }
+
+  // 一条只读信息行：没有复制按钮，值本身就是一句人话（读取顺序、版本号等）
+  function infoRow(label, valueHtml) {
+    if (!valueHtml) return '';
+    return '<div class="pathrow"><div class="pathrow-k">' + esc(label) + '</div>' +
+      '<div class="pathrow-v">' + valueHtml + '</div></div>';
+  }
+
+  function guideCard(title, rows, hint) {
+    if (!rows) return '';
+    return '<div class="card">' + cardHead(title) + rows +
+      (hint ? '<div class="help">' + esc(hint) + '</div>' : '') + '</div>';
+  }
+
+  // 「说明」分区：把原先散落在「关于」与各页角落的文件位置、端口、接口地址收在一处。
+  // 分成三张卡：本面板自己写的、fail2ban 系统自带的（只读）、敲门联动写的。
+  // 每张卡的标题就是归属，行内不再重复「这是谁的文件」。
+  function renderSetGuide() {
+    var meta = state.meta || {};
+    var paths = meta.paths || {};
+    var settings = state.settings || {};
+    var app = meta.app || {};
+    var info = (state.overview && state.overview.fail2ban) || {};
+    var fnk = (state.fnknock && state.fnknock.detected) || {};
+    var fnkGw = (state.fnknock && state.fnknock.gateway) || {};
+    // 封禁动作文件的路径挂在 banaction 上，不在 gateway 里：
+    // gateway 只描述「网关过滤器 + 联动 Jail」，动作文件是另一件东西。
+    var fnkBa = (state.fnknock && state.fnknock.banaction) || {};
+
+    var panelRows =
+      infoRow(t('path.panelPort'), '<span class="mono">' +
+        esc((app.bind || '0.0.0.0') + ':' + (app.port || '—')) + '</span>') +
+      pathRow(t('path.web'), paths.webDir) +
+      pathRow(t('path.var'), paths.varDir || paths.dataDir) +
+      pathRow(t('path.etc'), paths.etcDir) +
+      pathRow(t('path.backup'), paths.backupDir) +
+      pathRow(t('path.log'), paths.logFile || info.logFile);
+
+    var systemRows =
+      pathRow(t('path.managed'), settings.managedFile) +
+      infoRow(t('path.readOrder'), '<span class="mono">' +
         esc((settings.files || []).join('  →  ') || '—') + '</span>') +
-      kv(t('set.backupDir'), '<span class="mono">' + esc(paths.backupDir || '—') + '</span>') +
-      kv(t('set.dataDir'), '<span class="mono">' + esc(paths.varDir || paths.dataDir || '—') +
-        '</span>') +
-      '</dl></div>';
-    return setSection(t('set.aboutHint'), body);
+      pathRow(t('path.jailConf'), paths.jailConf, t('path.system')) +
+      pathRow(t('path.jailLocal'), paths.jailLocal, t('path.system')) +
+      pathRow(t('path.jailD'), paths.jailD) +
+      pathRow(t('path.filterD'), paths.filterD) +
+      pathRow(t('path.actionD'), paths.actionD) +
+      infoRow(t('path.socket'), '<span class="mono">' + esc(info.socket || '—') + '</span>') +
+      infoRow(t('path.client'), '<span class="mono">' + esc(info.client || '—') + '</span>');
+
+    var fnkRows = fnk.installed || fnk.varDir
+      ? pathRow(t('path.fnkBaseUrl'), fnk.baseUrl || '') +
+        pathRow(t('path.fnkVar'), fnk.varDir) +
+        pathRow(t('path.fnkAction'), fnkBa.actionFile) +
+        pathRow(t('path.fnkFilter'), fnkGw.filterPath) +
+        pathRow(t('path.fnkJail'), fnkGw.logPath)
+      : '<div class="empty">' + esc(t('fnk.notDetectedTitle')) + '</div>';
+
+    // 第三张卡不带尾注：它的标题已经说清归属，再挂一句「把封禁同步过去」是功能说明，
+    // 不是位置说明，混在同一张卡里会让人以为那句话在讲路径。
+    return setSection(t('set.guideHint'),
+      guideCard(t('path.panel'), panelRows) +
+      guideCard(t('path.system'), systemRows) +
+      guideCard(t('path.fnknock'), fnkRows));
   }
 
   /* ---------------------------------------------------------- 通知设置 */
@@ -3309,84 +3438,116 @@
     if (detail) return tSrc(detail) || detail;
     return raw || t('update.stagePreparing');
   }
+  // 升级遮罩的各个函数按「下载中 / 无总量可测」两种形态切换：
+  // 前者显示进度条 + 大小 + 百分比，后者把同一块空间留给一句「准备中…」。
+  // 两张子块高度合计固定，所以切换阶段时弹窗不变高矮。
 
-  function openUpOverlay() {
-    var overlay = $('#upOverlay');
+  function paintUpStage(text) {
+    var stage = $("#upStage");
+    if (stage) stage.textContent = text || t("update.stagePreparing");
+  }
+
+  // shape: "track" 有可测总量，显示进度条；"ready" 没有，只显示一句状态。
+  function paintUpShape(shape) {
+    var track = $("#upProgTrack");
+    var ready = $("#upProgReady");
+    if (track) track.hidden = shape !== "track";
+    if (ready) ready.hidden = shape === "track";
+  }
+
+  // 遮罩上的旋转图标：SVG 由 JS 注入，样式里靠 .upspin svg 控制尺寸与旋转。
+  // 只写一个空的 span 的话，图标不会出现 —— 遮罩上看不到任何进行中的提示。
+  var UP_SPIN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1"/><path d="M20.7 4.4v5h-5"/></svg>';
+
+  function openUpOverlay(title) {
+    var overlay = $("#upOverlay");
     if (!overlay) return;
     overlay.hidden = false;
-    var spin = $('#upSpin');
-    if (spin) spin.classList.remove('done');
-    var reload = $('#upReload');
+    var spin = $("#upSpin");
+    if (spin) {
+      spin.classList.remove("done");
+      if (!spin.querySelector("svg")) spin.innerHTML = UP_SPIN_ICON;
+    }
+    var reload = $("#upReload");
     if (reload) reload.hidden = true;
-    var keep = $('#upKeep');
+    var keep = $("#upKeep");
     if (keep) keep.hidden = false;
-    var block = $('#upProgBlock');
-    if (block) block.hidden = false;
-    var pct = $('#upProgPct');
-    if (pct) pct.textContent = '';
-    var bytes = $('#upProgBytes');
-    if (bytes) bytes.textContent = '—';
-    var fill = $('#upProgFill');
-    if (fill) fill.style.width = '0%';
-    var stage = $('#upStage');
-    if (stage) stage.textContent = t('update.stagePreparing');
+    var titleNode = $("#upTitle");
+    if (titleNode) titleNode.textContent = title || t("update.upgrading");
+    var fill = $("#upProgFill");
+    if (fill) fill.style.width = "0%";
+    var pct = $("#upProgPct");
+    if (pct) pct.textContent = "";
+    var bytes = $("#upProgBytes");
+    if (bytes) bytes.textContent = "";
+    paintUpStage(t("update.stagePreparing"));
+    paintUpShape("ready");
     state.update.maxPct = 0;
     state.update.done = false;
-    state.update.phase = '';
+    state.update.phase = "";
   }
 
   function closeUpOverlay() {
-    var overlay = $('#upOverlay');
+    var overlay = $("#upOverlay");
     if (overlay) overlay.hidden = true;
   }
 
-  // 进度区：done/total 都有才算百分比；没有总量就只显示「准备中…」与阶段文案。
+  // 进度区：done/total 都有才算百分比；没有总量就只留阶段文案。
   // 百分比取历史最大值，避免服务端瞬时快照回跳造成进度倒退。
   function paintUpProgress(prog) {
     if (!prog) return;
-    var stage = $('#upStage');
-    var phaseText = upPhaseText(prog.phase, prog.detail);
-    if (stage) stage.textContent = phaseText;
-    state.update.phase = prog.phase || '';
+    var phase = String(prog.phase || "").toLowerCase();
+    paintUpStage(upPhaseText(prog.phase, prog.detail));
+    state.update.phase = prog.phase || "";
 
     var done = Number(prog.done) || 0;
     var total = Number(prog.total) || 0;
     var serverPct = Number(prog.percent);
     if (isNaN(serverPct)) serverPct = 0;
-    var fill = $('#upProgFill');
-    var pctLabel = $('#upProgPct');
-    var bytesLabel = $('#upProgBytes');
-    var block = $('#upProgBlock');
-
-    if (block) block.hidden = false;
 
     if (total > 0) {
-      // 下载阶段：百分比优先用本地算的，服务端 percent 作为交叉校验的下限
+      paintUpShape("track");
       var pct = Math.min(100, Math.floor((done / total) * 100));
       pct = Math.max(pct, Math.min(100, serverPct));
       if (pct > state.update.maxPct) state.update.maxPct = pct;
-      if (fill) fill.style.width = state.update.maxPct + '%';
-      if (pctLabel) pctLabel.textContent = state.update.maxPct + '%';
+      var fill = $("#upProgFill");
+      if (fill) fill.style.width = state.update.maxPct + "%";
+      var pctLabel = $("#upProgPct");
+      if (pctLabel) pctLabel.textContent = state.update.maxPct + "%";
+      var bytesLabel = $("#upProgBytes");
       if (bytesLabel) {
-        bytesLabel.textContent = t('update.bytes', {
-          done: fmtSize(done), total: fmtSize(total)
-        });
+        bytesLabel.textContent = t("update.bytes", { done: fmtSize(done), total: fmtSize(total) });
       }
-    } else {
-      // 没有总量可测（idle / 安装阶段 / 服务端还没拿到长度）：
-      // 不假装有百分比，保持已经到达的高度，文字位显示阶段说明。
-      if (fill) fill.style.width = state.update.maxPct + '%';
-      if (pctLabel) {
-        // 下载已完成、正在安装时保留 100%，不要把它抹掉看起来像退回去了
-        pctLabel.textContent = state.update.maxPct >= 100 ? '100%' : '';
-      }
-      if (bytesLabel) {
-        bytesLabel.textContent = prog.detail
-          ? (tSrc(prog.detail) || t('update.stagePreparing'))
-          : t('update.stagePreparing');
-      }
+      return;
+    }
+
+    // 没有可测总量（准备 / 安装 / 服务重启）：不假装有百分比。
+    // 下载已经到 100% 时保留进度条满格，别让它看起来像是退回去了。
+    if (state.update.maxPct >= 100) {
+      paintUpShape("track");
+      var keepFill = $("#upProgFill");
+      if (keepFill) keepFill.style.width = "100%";
+      var keepPct = $("#upProgPct");
+      if (keepPct) keepPct.textContent = "100%";
+      var keepBytes = $("#upProgBytes");
+      if (keepBytes) keepBytes.textContent = "";
+      return;
+    }
+    paintUpShape("ready");
+    // 从「下载中」切过来时百分比位要清空：留着一个上一阶段的数字会让人以为
+    // 安装阶段也有百分比可看。
+    var clearPct = $("#upProgPct");
+    if (clearPct) clearPct.textContent = "";
+    var ready = $("#upProgReady");
+    if (ready) {
+      ready.textContent = prog.detail
+        ? (tSrc(prog.detail) || t("update.stagePreparing"))
+        : t("update.stagePreparing");
     }
   }
+
 
   function stopUpdatePoll() {
     if (state.update.poll) {
@@ -3440,79 +3601,84 @@
       }
     }, 1000);
   }
-
-  // mode: 'ok' 装完 / 'failed' 后端明确报错 / 'timeout' 我们等不到了（不代表升级失败）
+  // mode: "ok" 装完 / "failed" 后端明确报错 / "timeout" 我们等不到了（不代表升级失败）
   function finishUpgrade(ok, prog, mode) {
-    var kind = ok ? 'ok' : (mode || 'failed');
+    var kind = ok ? "ok" : (mode || "failed");
     state.update.done = true;
-    var spin = $('#upSpin');
-    if (spin && ok) spin.classList.add('done');
-    var stage = $('#upStage');
-    if (stage) {
-      stage.textContent = ok ? t('update.done')
-        : (kind === 'timeout' ? t('update.pollTimeout') : t('update.phaseFailed'));
-    }
+    var spin = $("#upSpin");
+    if (spin && ok) spin.classList.add("done");
     if (ok) {
-      var fill = $('#upProgFill');
-      if (fill) fill.style.width = '100%';
-      var pct = $('#upProgPct');
-      if (pct) pct.textContent = '100%';
+      paintUpShape("track");
+      var fill = $("#upProgFill");
+      if (fill) fill.style.width = "100%";
+      var pct = $("#upProgPct");
+      if (pct) pct.textContent = "100%";
+      var bytes = $("#upProgBytes");
+      if (bytes) bytes.textContent = "";
+      paintUpStage(t("update.done"));
+    } else if (kind === "timeout") {
+      paintUpStage(t("update.pollTimeout"));
+    } else {
+      paintUpStage(t("update.phaseFailed"));
     }
     // 超时也要给一个重载入口：面板可能只是慢，用户刷新就能确认结果
-    var reload = $('#upReload');
+    var reload = $("#upReload");
     if (reload) reload.hidden = false;
     if (ok) {
-      toast(t('update.done'), 'ok', 4000);
+      toast(t("update.done"), "ok", 4000);
       setTimeout(function () { location.reload(); }, 1500);
-    } else if (kind === 'timeout') {
-      toast(t('update.pollTimeout'), 'warn', 9000);
+    } else if (kind === "timeout") {
+      toast(t("update.pollTimeout"), "warn", 9000);
     } else {
-      var detail = (prog && (prog.detail || prog.error)) || '';
+      var detail = (prog && (prog.detail || prog.error)) || "";
       toast(detail
-        ? t('update.failed', { detail: localizedSource(detail, 'common.unknownError') })
-        : t('update.phaseFailed'), 'err', 9000);
+        ? t("update.failed", { detail: localizedSource(detail, "common.unknownError") })
+        : t("update.phaseFailed"), "err", 9000);
     }
   }
 
   function startUpgrade(button) {
     var info = updateInfo() || {};
-    var target = info.latest || '';
-    if (!confirmDanger(t('update.installConfirm', { version: target || '—' }))) return;
-    state.update.before = (state.meta && state.meta.app && state.meta.app.version) || '';
-    openUpOverlay();
+    var target = info.latest || "";
+    if (!confirmDanger(t("update.installConfirm", { version: target || "—" }))) return;
+    state.update.before = (state.meta && state.meta.app && state.meta.app.version) || "";
+    openUpOverlay(target ? t("update.installingTitle", { v: target }) : t("update.upgrading"));
+    paintUpStage(t("update.installingDownload"));
     if (button) busy(button, true);
     // 轮询必须排在阻塞请求之前：后端在这个请求里同步下载安装包，
     // await 会一直挂到下载结束，等它返回才起轮询就全程零进度。
     pollUpdateProgress();
-    api('update/install', { method: 'POST', body: {} })
+    api("update/install", { method: "POST", body: {} })
       .then(function (data) {
         // 后端没起来（缺安装包、权限不足等）会直接回 ok:false，别让轮询空转到超时
         if (data && data.ok === false) {
           stopUpdatePoll();
           closeUpOverlay();
           // 后端在忙时回 {ok:false, error:"busy"}，这是「已在升级」不是失败
-          if (data.error === 'busy' || data.busy === true) {
-            toast(t('update.installBlocked'), 'warn', 5000);
+          if (data.error === "busy" || data.busy === true) {
+            toast(t("update.installBlocked"), "warn", 5000);
             return;
           }
-          toast(localizedSource(data.detail || data.error, 'update.phaseFailed'), 'err', 9000);
+          toast(localizedSource(data.detail || data.error, "update.phaseFailed"), "err", 9000);
           return;
         }
         if (data && data.phase) paintUpProgress(data);
-        toast(t('update.installing'), 'ok', 3000);
+        toast(t("update.installing"), "ok", 3000);
       })
       .catch(function (err) {
         stopUpdatePoll();
         if (err && err.status === 409) {
           closeUpOverlay();
-          toast(t('update.installBlocked'), 'warn');
+          toast(t("update.installBlocked"), "warn");
         } else {
           // 升级期间服务会重启，首个请求失败是常态，留着轮询等它回来
-          toast(localizeErr(err, 'update.openFailed'), 'warn', 6000);
+          toast(localizeErr(err, "update.openFailed"), "warn", 6000);
         }
       })
       .finally(function () { if (button) busy(button, false); });
   }
+
+
 
   function onUpdateTick() {
     if (document.hidden) return;
@@ -3629,6 +3795,8 @@
     var pollInterval = (state.notifications && state.notifications.settings &&
       state.notifications.settings.pollInterval) || 30;
 
+    // 页面级工具条：标题、一句话说明、测试与保存。保存放在这里而不是每块各放一个，
+    // 六块共用同一份设置，分开存会让人分不清刚才改的是哪一块。
     var html = t('fnk.titleInline') +
       ("<span class=\"hint\">" + t('fnk.hint') + "</span>") +
       '<div class="spacer"></div>' +
@@ -3638,149 +3806,181 @@
     if (!detected.installed && !detected.running) {
       html += '<div class="banner danger"><div class="banner-body">' +
         ("<strong>" + t('fnk.notDetectedTitle') + "</strong>") +
-        t('fnk.notDetectedBody1') +
-        t('fnk.notDetectedBody2') +
+        t('fnk.notDetectedBody1') + t('fnk.notDetectedBody2') +
         '</div></div>';
     } else if (detected.installed && !detected.running) {
       html += '<div class="banner"><div class="banner-body">' +
-        t('fnk.notRespondingTitle') +
-        t('fnk.noResponseBody') +
+        t('fnk.notRespondingTitle') + t('fnk.noResponseBody') +
         '</div></div>';
     }
 
-    html += '<div class="grid cols-2" style="align-items:start">';
+    html += fnkWorkbarHtml();
+    html += fnkTabHtml(state.fnkTab, data, s, detected, f2bState, log, pollInterval);
+    host.innerHTML = html;
+  }
 
-    // 封禁方式：决定 fail2ban 封禁一个 IP 时由谁来执行
+  // 与设置页同一套标签条：六块一次只展开一块，窄屏横向滚动
+  function fnkWorkbarHtml() {
+    var html = '<div class="workbar" id="fnkWorkbar" role="tablist">';
+    FNK_TABS.forEach(function (id) {
+      var on = state.fnkTab === id;
+      html += '<button type="button" role="tab" data-fnk-tab="' + esc(id) + '"' +
+        ' aria-selected="' + (on ? 'true' : 'false') + '"' +
+        (on ? ' class="on"' : '') + '>' + esc(fnkTabLabel(id)) + '</button>';
+    });
+    return html + '</div>';
+  }
+
+  function fnkTabHtml(tab, data, s, detected, f2bState, log, pollInterval) {
+    switch (tab) {
+      case 'sync': return fnkSyncPanel(data, s);
+      case 'conn': return fnkConnPanel(data, s, detected);
+      case 'status': return fnkStatusPanel(data, s, detected, f2bState, pollInterval);
+      case 'list': return fnkListPanel();
+      case 'log': return fnkLogPanel(log, s);
+      default: return fnkModePanel(data, s);
+    }
+  }
+
+  // ---- 封禁方式：决定 fail2ban 封禁一个 IP 时由谁来执行 ----
+  function fnkModePanel(data, s) {
     var ba = data.banaction || {};
     var g = data.gateway || {};
-    html += ("<div class=\"card\"><h3>" + t('fnk.modeTitle') + "</h3>") +
+    return '<div class="card">' + cardHead(t('fnk.modeTitle')) +
       switchRowFor('fnk', 'banViaFnknock', t('fnk.enableLabel'), s.banViaFnknock,
-        t('fnk.enableHelp1') +
-        t('fnk.enableHelp2') +
-        t('fnk.enableHelp3')) +
+        t('fnk.enableHelp1') + t('fnk.enableHelp2') + t('fnk.enableHelp3')) +
       (s.banViaFnknock && !s.keepFirewall
-        ? ("<div class=\"field\"><div class=\"merged-hint\">" + t('fnk.onlyKnockHint1')) +
-          (t('fnk.onlyKnockHint2') + "</div></div>")
+        ? '<div class="merged-hint">' + t('fnk.onlyKnockHint1') + t('fnk.onlyKnockHint2') + '</div>'
         : '') +
       // 高级选项，默认关闭（即只走敲门）
-      '<div id="fnkKeepFirewallWrap"' + (s.banViaFnknock ? '' : ' style="display:none"') + '>' +
-      switchRowFor('fnk', 'keepFirewall', t('fnk.keepFirewallLabel'), s.keepFirewall,
-        t('fnk.keepFirewallHelp1') +
-        t('fnk.keepFirewallHelp2')) +
+      '<div class="field" id="fnkKeepFirewallWrap"' + (s.banViaFnknock ? '' : ' hidden') + '>' +
+      '<div class="switch">' +
+      switchToggle('data-toggle-fnk', 'keepFirewall', s.keepFirewall, t('fnk.keepFirewallLabel')) +
+      '<span>' + esc(t('fnk.keepFirewallLabel')) + '</span></div>' +
+      '<div class="help">' + esc(t('fnk.keepFirewallHelp1')) + esc(t('fnk.keepFirewallHelp2')) + '</div>' +
       '</div>' +
+      '<div class="help">' + esc(t('fnk.modulesHint')) + '</div>' +
+      '</div>' +
+
+      '<div class="card">' + cardHead(t('fnk.effectiveAction')) +
       '<dl class="kv">' +
-      kv(t('fnk.effectiveAction'), '<span class="mono">' +
+      kv(t('fnk.effNow'), '<span class="mono">' +
         esc(ba.effectiveBanaction || t('fnk.inheritedDefault')) + '</span>') +
       kv(t('fnk.inheritedAction'), '<span class="mono">' + esc(ba.inheritedBanaction || '—') + '</span>') +
       kv(t('fnk.actionFile'), ba.actionInstalled
-        ? t('fnk.badgeInstalled')
-        : t('fnk.badgeNotInstalled')) +
+        ? '<span class="badge ok">' + t('fnk.badgeInstalled') + '</span>'
+        : '<span class="badge muted">' + t('fnk.badgeNotInstalled') + '</span>') +
       kv(t('fnk.filterRow'), g.filterInstalled
-        ? ("<span class=\"badge ok\">" + t('common.installed') + "</span> <span class=\"mono\">") + esc(g.filterName) + '.local</span>'
-        : t('fnk.badgeNotInstalled')) +
+        ? '<span class="badge ok">' + t('common.installed') + '</span> <span class="mono">' +
+          esc(g.filterName) + '.local</span>'
+        : '<span class="badge muted">' + t('fnk.badgeNotInstalled') + '</span>') +
       kv(t('fnk.jailRow'), g.jailInstalled
-        ? ("<span class=\"badge ok\">" + t('fnk.joined') + "</span> <span class=\"mono\">") + esc(g.jailName) +
-          '</span> <span class="hint">' + esc(g.logPath) + '</span>'
-        : t('fnk.badgeNotJoined')) +
+        ? '<span class="badge ok">' + t('fnk.joined') + '</span> <span class="mono">' +
+          esc(g.jailName) + '</span> <span class="hint">' + esc(g.logPath) + '</span>'
+        : '<span class="badge muted">' + t('fnk.badgeNotJoined') + '</span>') +
       kv(t('fnk.ignoreRow'), g.jailInstalled && g.ignoreip
         ? '<span class="mono">' + esc(g.ignoreip) + '</span>'
         : '<span class="badge muted">—</span>') +
       '</dl>' +
       (g.jailInstalled && g.logDirExists === false
-        ? ("<div class=\"help\" style=\"margin-top:8px;color:var(--danger)\">" + t('fnk.logDirMissingPrefix') + " <span class=\"mono\">") +
-          esc(g.logDir) + ("</span> " + t('fnk.logDirMissingMid')) +
-          t('fnk.logDirMissing2')
+        ? '<div class="help warn-text">' + t('fnk.logDirMissingPrefix') + ' <span class="mono">' +
+          esc(g.logDir) + '</span> ' + t('fnk.logDirMissingMid') + t('fnk.logDirMissing2') + '</div>'
         : '') +
       (ba.actionInstalled
-        ? '<div class="help" style="margin-top:8px"><span class="mono">' +
-          esc(ba.actionFile) + '</span></div>'
+        ? '<div class="help"><span class="mono">' + esc(ba.actionFile) + '</span></div>'
         : '') +
-      '<div class="help" style="margin-top:10px">' +
-      t('fnk.howTitle') +
-      t('fnk.howBanaction') +
-      t('fnk.howRest') +
-      t('fnk.howLast') +
-      '</div>';
+      '</div>' +
 
-    html += ("<div class=\"card\"><h3>" + t('fnk.syncTitle') + "</h3>") +
-      switchRowFor('fnk', 'enabled', t('fnk.syncEnable'), s.enabled,
-        t('fnk.syncEnableHelp')) +
+      '<div class="card">' + cardHead(t('fnk.howCardTitle')) +
+      '<div class="help help-tight">' + t('fnk.howText') + '</div></div>';
+  }
+
+  // ---- 同步：把 fail2ban 的封禁 / 解封镜像进敲门黑名单 ----
+  function fnkSyncPanel(data, s) {
+    return '<div class="card">' + cardHead(t('fnk.syncTitle')) +
+      switchRowFor('fnk', 'enabled', t('fnk.syncEnable'), s.enabled, t('fnk.syncEnableHelp')) +
       switchRowFor('fnk', 'removeOnUnban', t('fnk.removeOnUnban'), s.removeOnUnban,
         t('fnk.removeOnUnbanHelp')) +
-      ("<div class=\"field\"><label>" + t('fnk.sourceLabel') + "</label><select id=\"fnkSource\">") +
+      '<div class="field"><label>' + t('fnk.sourceLabel') + '</label><select id="fnkSource">' +
       (data.sources || []).map(function (item) {
         return option(item.value, tSrc(item.label), s.source);
-      }).join('') + '</select>' +
-      t('fnk.sourceHelpInline') +
-      ("<div class=\"field\"><label>" + t('fnk.noteLabel') + "</label>") +
+      }).join('') + '</select><div class="help">' + esc(t('fnk.sourceHelpPrefix')) + '</div></div>' +
+      '<div class="field"><label>' + t('fnk.noteLabel') + '</label>' +
       '<input type="text" id="fnkComment" value="' + esc(s.comment || 'fail2ban') + '">' +
-      ("<div class=\"help\">" + t('fnk.noteHelp') + "</div>") +
-      ("<div class=\"help\">" + t('fnk.instantHelp1')) +
-      t('fnk.instantHelp2') +
-      '</div>';
+      '<div class="help">' + esc(t('fnk.noteHelpPrefix')) + '</div></div>' +
+      '<div class="help">' + esc(t('fnk.instantHelp1')) + esc(t('fnk.instantHelp2')) + '</div>' +
+      '</div>' +
 
-    html += ("<div class=\"card\"><h3>" + t('fnk.connTitle') + "</h3>") +
-      ("<div class=\"field\"><label>" + t('fnk.baseUrlLabel') + "</label>") +
+      '<div class="card">' + cardHead(t('fnk.manualTitle')) +
+      '<div class="field"><label>' + t('fnk.ipLabel') + '</label>' +
+      '<input type="text" id="fnkManualIps" placeholder="' + esc(t('fnk.manualIpsPlaceholder')) + '">' +
+      '<div class="help">' + esc(t('fnk.loopbackNote1')) + esc(t('fnk.loopbackNote2b')) + '</div></div>' +
+      cardFoot(
+        '<button class="btn" data-act="fnk-push-all">' + t('fnk.pushAll') + '</button>' +
+        '<button class="btn" data-act="fnk-push">' + t('fnk.addToBlacklist') + '</button>' +
+        '<button class="btn danger" data-act="fnk-remove">' + t('fnk.removeFromBlacklist') + '</button>') +
+      '</div>';
+  }
+
+  // ---- 连接：敲门管理接口的地址、鉴权与超时 ----
+  function fnkConnPanel(data, s, detected) {
+    return '<div class="card">' + cardHead(t('fnk.connTitle')) +
+      '<div class="field"><label>' + t('fnk.baseUrlLabel') + '</label>' +
       '<input type="text" id="fnkBaseUrl" value="' + esc(s.baseUrl || '') +
-      t('fnk.baseUrlPlaceholderInline') + esc(detected.baseUrl || 'http://127.0.0.1:7998') + '">' +
-      t('fnk.listenHelpInline') +
-      ("<div class=\"field\"><label>" + t('fnk.authLabel') + "</label><select id=\"fnkAuthMode\">") +
+      '" placeholder="' + esc(detected.baseUrl || 'http://127.0.0.1:7998') + '">' +
+      '<div class="help">' + t('fnk.baseUrlHelpText') + '</div></div>' +
+      '<div class="field"><label>' + t('fnk.authLabel') + '</label><select id="fnkAuthMode">' +
       (data.authModes || []).map(function (item) {
         return option(item.value, tSrc(item.label), s.authMode);
-      }).join('') + '</select>' +
-      ("<div class=\"help\">" + t('fnk.authHelp1')) +
-      (t('fnk.authHelp2') + "</div>") +
-      ("<div class=\"field\"><label>" + t('fnk.headerNameLabel') + "</label>") +
+      }).join('') + '</select><div class="help">' + t('fnk.authHelpText') + '</div></div>' +
+      '<div class="field"><label>' + t('fnk.headerNameLabel') + '</label>' +
       '<input type="text" id="fnkAuthHeader" value="' + esc(s.authHeader || 'x-fn-knock-admin-auth') + '">' +
-      ("<div class=\"help\">" + t('fnk.headerNameHelp') + "</div>") +
-      ("<div class=\"field\"><label>" + t('fnk.credentialLabel') + "</label>") +
+      '<div class="help">' + esc(t('fnk.headerNameHelpText')) + '</div></div>' +
+      '<div class="field"><label>' + t('fnk.credentialLabel') + '</label>' +
       '<input type="text" id="fnkAuthValue" value="' + esc(s.authValue || '') +
-      ("\" placeholder=\"" + t('fnk.credentialPlaceholder') + "\">") +
-      ("<div class=\"help\">" + t('fnk.credentialHelp') + "</div>") +
-      ("<div class=\"field\"><label>" + t('fnk.timeoutLabel') + "</label>") +
+      '" placeholder="' + esc(t('fnk.credentialPlaceholder')) + '">' +
+      '<div class="help">' + esc(t('fnk.credentialHelpText')) + '</div></div>' +
+      '<div class="field"><label>' + t('fnk.timeoutLabel') + '</label>' +
       '<input type="number" id="fnkTimeout" min="2" max="60" value="' + esc(s.timeout || 8) + '"></div>' +
+      cardFoot('<button class="btn" data-act="fnk-test">' + t('common.testConnection') + '</button>') +
       '</div>';
+  }
 
-    html += ("<div class=\"card\"><h3>" + t('fnk.probeTitle') + "</h3><dl class=\"kv\">") +
+  // ---- 运行状态：本机探测结果 ----
+  function fnkStatusPanel(data, s, detected, f2bState, pollInterval) {
+    return '<div class="card">' + cardHead(t('fnk.probeTitle')) +
+      '<dl class="kv">' +
       kv(t('fnk.installState'), detected.installed
-        ? t('fnk.badgeInstalled')
-        : t('fnk.badgeNotDetected')) +
+        ? '<span class="badge ok">' + t('fnk.badgeInstalled') + '</span>'
+        : '<span class="badge muted">' + t('fnk.badgeNotDetected') + '</span>') +
       kv(t('fnk.varDir'), '<span class="mono">' + esc(detected.varDir || '—') + '</span>') +
       kv(t('fnk.backend'), detected.running
-        ? ("<span class=\"badge ok\">" + t('fnk.listening') + "</span> <span class=\"mono\">127.0.0.1:") + esc(detected.port) + '</span>'
-        : t('fnk.badgeNoResponse')) +
+        ? '<span class="badge ok">' + t('fnk.listening') + '</span> <span class="mono">127.0.0.1:' +
+          esc(detected.port) + '</span>'
+        : '<span class="badge muted">' + t('fnk.badgeNoResponse') + '</span>') +
       kv(t('fnk.localSecret'), detected.secretFound
-        ? t('fnk.badgeReadable')
-        : t('fnk.badgeNotFound')) +
+        ? '<span class="badge ok">' + t('fnk.badgeReadable') + '</span>'
+        : '<span class="badge muted">' + t('fnk.badgeNotFound') + '</span>') +
       kv('fail2ban', f2bState.installed
         ? (f2bState.running
-          ? t('notify.badgeRunning')
-          : t('notify.badgeStopped'))
-        : t('dash.badgeNotInstalled')) +
-      kv(t('fnk.pollIntervalRow'), t('fnk.pollIntervalValue', { n: esc(pollInterval) })) +
+          ? '<span class="badge ok">' + t('notify.badgeRunning') + '</span>'
+          : '<span class="badge muted">' + t('notify.badgeStopped') + '</span>')
+        : '<span class="badge muted">' + t('dash.badgeNotInstalled') + '</span>') +
+      kv(t('fnk.pollIntervalRow'), esc(t('fnk.pollIntervalValue', { n: pollInterval }))) +
       '</dl>' +
-      '<div class="toolbar" style="margin:14px 0 0">' +
-      ("<button class=\"btn\" data-act=\"fnk-test\">" + t('common.testConnection') + "</button>") +
-      ("<button class=\"btn\" data-act=\"fnk-push-all\">" + t('fnk.pushAll') + "</button>") +
-      '</div>' +
-      ("<div class=\"help\" style=\"margin-top:10px\">" + t('fnk.loopbackNote1')) +
-      t('fnk.loopbackNote2') +
-      ("<div class=\"section-title\">" + t('fnk.manualTitle') + "</div>") +
-      t('fnk.ipLabelInline') +
-      ("<input type=\"text\" id=\"fnkManualIps\" placeholder=\"" + t('fnk.manualIpsPlaceholder') + "\">") +
-      '<div class="toolbar" style="margin:10px 0 0">' +
-      ("<button class=\"btn\" data-act=\"fnk-push\">" + t('fnk.addToBlacklist') + "</button>") +
-      ("<button class=\"btn danger\" data-act=\"fnk-remove\">" + t('fnk.removeFromBlacklist') + "</button>") +
-      '</div></div>' +
+      cardFoot('<button class="btn" data-act="fnk-test">' + t('common.testConnection') + '</button>') +
       '</div>';
+  }
 
-    html += '</div>';
-
+  // ---- 黑名单：敲门那边的通用黑名单分页表 ----
+  function fnkListPanel() {
     var bl = state.fnkBlacklist;
-    html += ("<div class=\"card\"><h3>" + t('fnk.blacklistTitle') + "</h3><div class=\"toolbar\">") +
-      ("<input type=\"text\" id=\"fnkSearch\" placeholder=\"" + t('fnk.searchPlaceholder') + "\" value=\"") +
-      esc(state.fnkOpts.search) + '">' +
-      ("<button class=\"btn\" data-act=\"fnk-reload\">" + t('common.refreshList') + "</button></div>");
+    var html = '<div class="card">' + cardHead(t('fnk.blacklistTitle'),
+      '<button class="btn sm" data-act="fnk-reload">' + t('common.refreshList') + '</button>') +
+      '<div class="toolbar">' +
+      '<input type="text" id="fnkSearch" class="toolbar-search" placeholder="' +
+      esc(t('fnk.searchPlaceholder')) + '" value="' + esc(state.fnkOpts.search) + '">' +
+      '</div>';
 
     if (!bl) {
       html += t('fnk.loadingInline');
@@ -3791,34 +3991,40 @@
       if (!items.length) {
         html += t('fnk.blacklistEmptyInline');
       } else {
-        html += '<div class="table-wrap"><table><thead><tr>' +
-          ("<th>IP</th><th>" + t('fnk.colSource') + "</th><th>" + t('fnk.colNote') + "</th><th>" + t('ban.colExpires') + "</th><th></th>") +
+        html += '<div class="table-wrap"><table class="fixed fnk-table"><thead><tr>' +
+          '<th class="c-ip">IP</th><th class="c-source">' + t('fnk.colSource') + '</th>' +
+          '<th class="c-note">' + t('fnk.colNote') + '</th>' +
+          '<th class="c-exp">' + t('ban.colExpires') + '</th><th class="c-acts"></th>' +
           '</tr></thead><tbody>';
         items.forEach(function (item) {
           var ip = item.ip || item.address || item.client_ip || '';
           html += '<tr>' +
-            '<td class="mono">' + esc(ip) + '</td>' +
-            '<td class="hint">' + esc(item.source || '—') + '</td>' +
-            '<td class="hint">' + esc(item.comment || '—') + '</td>' +
-            '<td class="hint">' + esc(item.expires_at || item.expiresAt || t('common.permalink')) + '</td>' +
-            '<td><div class="cell-actions">' +
-            '<button class="btn sm danger" data-act="fnk-remove-one" data-ip="' + esc(ip) +
-            ("\">" + t('set.remove') + "</button></div></td></tr>");
+            '<td class="c-ip mono">' + esc(ip) + '</td>' +
+            '<td class="c-source">' + esc(item.source || '—') + '</td>' +
+            '<td class="c-note">' + esc(item.comment || '—') + '</td>' +
+            '<td class="c-exp">' + esc(item.expires_at || item.expiresAt || t('common.permalink')) + '</td>' +
+            '<td class="c-acts"><div class="cell-actions">' +
+            '<button class="btn sm danger" data-act="fnk-remove-one" data-ip="' + esc(ip) + '">' +
+            t('set.remove') + '</button></div></td></tr>';
         });
         html += '</tbody></table></div>';
       }
       var payload = bl.data || {};
       var total = payload.total !== undefined ? payload.total : payload.totalCount;
       if (total !== undefined) {
-        html += t('fnk.totalCountInline', { n: esc(total) });
+        html += '<div class="help">' + esc(t('fnk.totalCount', { n: total })) + '</div>';
       }
     }
-    html += '</div>';
+    return html + '</div>';
+  }
 
-    html += ("<div class=\"card\"><h3>" + t('fnk.logTitle')) +
-      (log.length ? t('common.recentCount', { n: log.length }) : '') + '</h3>';
+  // ---- 联动日志：最近的同步 / 测试记录 ----
+  function fnkLogPanel(log, s) {
+    var html = '<div class="card">' + cardHead(t('fnk.logTitle'),
+      log.length ? '<button class="btn sm" data-act="fnk-log-clear">' +
+        t('notify.clearHistory') + '</button>' : '');
     if (!log.length) {
-      html += ("<div class=\"empty\">" + t('fnk.logEmpty')) +
+      html += '<div class="empty">' + t('fnk.logEmpty') +
         (s.enabled ? t('fnk.logEmptyOn') : t('fnk.logEmptyOff')) + '</div>';
     } else {
       html += '<div class="event-list">' +
@@ -3829,21 +4035,16 @@
             '<span class="ev-dot"></span>' +
             '<div class="ev-body"><div class="ev-title">' + esc(label) +
             (entry.jail ? ' · ' + esc(entry.jail) : '') + ' ' +
-            (entry.ok ? t('fnk.badgeSuccess')
-              : t('fnk.badgeFailed')) +
+            (entry.ok ? t('fnk.badgeSuccess') : t('fnk.badgeFailed')) +
             '</div><div class="ev-text">' +
             esc((entry.ips && entry.ips.length ? entry.ips.join(', ') : t('fnk.noIps')) +
               (entry.detail ? t('fnk.sep') + entry.detail : '')) +
             '</div></div>' +
             '<span class="ev-time">' + esc(fmtTime(entry.time)) + '</span>' +
             '</div>';
-        }).join('') + '</div>' +
-        '<div class="toolbar" style="margin:14px 0 0">' +
-        ("<button class=\"btn\" data-act=\"fnk-log-clear\">" + t('notify.clearHistory') + "</button></div>");
+        }).join('') + '</div>';
     }
-    html += '</div>';
-
-    host.innerHTML = html;
+    return html + '</div>';
   }
 
   function draftFnknockSettings() {
@@ -3928,6 +4129,67 @@
     fnknockSync({ action: action, ips: ips }, button);
   }
 
+  /* ------------------------------------------------- 手机端选择器 */
+
+  // 原生 <select> 在手机上弹出的是系统自带列表：主题、行高、触控尺寸都与面板
+  // 不是一套。窄屏下拦住它的默认弹层，改用底部选择条（与面板同一套令牌）。
+  // 选中后仍然派发一次真正的 change 事件，页面里原有的 onChange 逻辑照旧生效 ——
+  // 这样以后新增下拉时不必再写一遍手机端分支。
+  var pickerCtx = null;
+
+  function mobilePickerOn() {
+    return window.innerWidth <= 720;
+  }
+
+  // 选择条标题取字段的 label：没有就退回 aria-label，都没有就不显示标题行
+  function pickerLabelOf(select) {
+    var field = select.closest ? select.closest(".field") : null;
+    var label = field ? field.querySelector("label") : null;
+    var text = label ? String(label.textContent || "").trim() : "";
+    if (!text) text = String(select.getAttribute("aria-label") || "").trim();
+    return text;
+  }
+
+  function closePicker() {
+    var mask = $("#pickerMask");
+    if (mask) mask.hidden = true;
+    pickerCtx = null;
+  }
+
+  function openPicker(select) {
+    var mask = $("#pickerMask");
+    var list = $("#pickerList");
+    var title = $("#pickerTitle");
+    if (!mask || !list || !title || !select) return;
+    var current = String(select.value);
+    var html = "";
+    for (var i = 0; i < select.options.length; i += 1) {
+      var opt = select.options[i];
+      var value = String(opt.value);
+      html += '<button type="button" class="picker-item" data-pick="' + esc(value) + '"' +
+        (opt.disabled ? " disabled" : "") + ">" +
+        '<span class="lbl">' + esc(opt.textContent || value) + "</span>" +
+        '<i class="dot' + (value === current ? " on" : "") + '"></i></button>';
+    }
+    list.innerHTML = html;
+    title.textContent = pickerLabelOf(select);
+    title.hidden = !title.textContent;
+    pickerCtx = select;
+    mask.hidden = false;
+    list.scrollTop = 0;
+  }
+
+  function pickValue(value) {
+    var select = pickerCtx;
+    closePicker();
+    if (!select) return;
+    if (String(select.value) === String(value)) return;
+    select.value = value;
+    // 派发真正的 change：换排序字段要重置方向、切 Jail 要重拉封禁状态，
+    // 全在既有的 onChange 里，这里不重复实现一遍。
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
   /* ------------------------------------------------------------ 抽屉 */
 
   function openDrawer(title, body, foot) {
@@ -3987,6 +4249,7 @@
     if (setTabBtn) { setSettingsTab(setTabBtn.dataset.setTab); return; }
 
     if (act === 'copy-ip') { copyText(ip, trigger); return; }
+    if (act === 'copy-path') { copyText(trigger.dataset.path, trigger); return; }
 
     // 行复选框的勾选由 onChange 处理（点击时 checked 已更新，这里什么也不做）
     if (act === 'select-ip') return;
@@ -4636,9 +4899,9 @@
       state.fnknock.settings[fnkKey] = !state.fnknock.settings[fnkKey];
       setSwitch(fnkTrack, !!state.fnknock.settings[fnkKey]);
       if (fnkKey === 'banViaFnknock') {
-        // 开启后展开「同时保留系统防火墙封禁」，无需整页重绘
-        var wrap = $('#fnkKeepFirewallWrap');
-        if (wrap) wrap.style.display = state.fnknock.settings.banViaFnknock ? '' : 'none';
+        // 这一块里「保留系统防火墙」子项与「只走敲门」的提示都跟着它变，
+        // 直接重绘这块最省事，也避免两种状态各写一套显隐逻辑
+        renderFnknock();
       }
       return;
     }
@@ -4840,12 +5103,49 @@
     $('#drawerMask').addEventListener('click', closeDrawer);
     $('#drawerClose').addEventListener('click', closeDrawer);
 
+    // 手机端选择条：点「取消」或遮罩关闭，点某一项即选中。
+    // 用 mousedown 而不是 click 拦截 select 的默认弹层：click 时系统弹层
+    // 可能已经开始展开，拦不住。
+    var pickerMask = $('#pickerMask');
+    if (pickerMask) {
+      pickerMask.addEventListener('click', function (event) {
+        if (event.target.closest('#pickerCancel') || event.target === pickerMask) {
+          event.preventDefault();
+          closePicker();
+          return;
+        }
+        var item = event.target.closest('[data-pick]');
+        if (item && !item.disabled) {
+          event.preventDefault();
+          pickValue(item.dataset.pick);
+        }
+      });
+    }
+    document.addEventListener('mousedown', function (event) {
+      if (!mobilePickerOn()) return;
+      var select = event.target.closest ? event.target.closest('select') : null;
+      if (!select || select.disabled) return;
+      // 只拦「单选、选项已就绪」的普通下拉；多选与非 select 一律放行
+      if (select.multiple) return;
+      event.preventDefault();
+      openPicker(select);
+    }, true);
+    document.addEventListener('touchstart', function (event) {
+      if (!mobilePickerOn()) return;
+      var select = event.target.closest ? event.target.closest('select') : null;
+      if (!select || select.disabled || select.multiple) return;
+      event.preventDefault();
+      openPicker(select);
+    }, { capture: true, passive: false });
+
     $('#menuToggle').addEventListener('click', openSidebar);
     $('#scrim').addEventListener('click', closeSidebar);
     $('#btnCollapse').addEventListener('click', toggleCollapsed);
 
     document.addEventListener('keydown', function (event) {
       if (event.key === 'Escape') {
+        // 选择条盖在页面之上时优先关它，别把下面的抽屉一起关掉
+        if (pickerCtx) { closePicker(); return; }
         closeDrawer();
         return;
       }
@@ -4895,8 +5195,9 @@
     // 标签条用事件委托绑一次，避免每次重绘都要重新绑
     $('#view').addEventListener('click', function (event) {
       var tabBtn = event.target.closest('[data-set-tab]');
-      if (!tabBtn) return;
-      setSettingsTab(tabBtn.dataset.setTab);
+      if (tabBtn) { setSettingsTab(tabBtn.dataset.setTab); return; }
+      var fnkBtn = event.target.closest('[data-fnk-tab]');
+      if (fnkBtn) setFnkTab(fnkBtn.dataset.fnkTab);
     });
 
     // 升级遮罩：「立即重新加载」与超时后的手动兜底
