@@ -37,14 +37,15 @@
 | 26.11.2 | 212,060 | 面板内图标换成自身资源（修豆腐块） |
 | 26.11.3 | 266,028 | i18n 中英文全量切换、主题图标按钮、删概览标题行、侧栏只留应用名 |
 | 26.11.4 | 291,407 | 新黑白盾牌九档图标、删侧栏品牌行、表格固定列宽、排序独立控件；顺带修 3 个缺陷 |
+| **26.11.17** | **364,158** | 一键升级真正跑通：改用 install-local（uninstall 被拒、install-fpk 对已装应用无效），升级文件搬到卸载不清的位置（@apphome），修 .fpk 被当 gzip 打开、manifest changelog 折行两处校验自伤；更新页改成整页一张卡片；开发者信息与应用中心数据库同步 | 
 | **26.11.10** | **368,640** | 更新页改成整页一张卡片：卡片头带「打开发布页面」，版本对比 + 状态条（右侧两个按钮）+ 限高滚动更新说明 + 安装包清单 + 仓库/检查时间/发布时间；无新版本时一键更新不渲染；修「检查于 {t}」占位符与本地版本高于线上时的显示 | 
 | **26.11.9** | **366,940** | 应用信息与发布渠道：开发者/发布者改为 Smi1ezZ、主页指向仓库；应用中心数据库（PostgreSQL appcenter.app）版本与作者同步；GitHub 仓库上线并发布 v26.11.8/v26.11.9；更新页拿不到包大小时显示「大小未知」而非 0 B | 
 | **26.11.7** | **366,587** | 侧栏左下角对齐：主题（显示器/月亮/太阳）、语言（文/A）、折叠（方框+竖线+箭头）三个图标统一 18px 笔触；版本行加地球图标并并列显示引擎版本 `v26.11.7 · Fail2ban 1.0.2`；去掉语言角标；收起态按钮保持 34×34 方形竖排 | 
 | **26.11.6** | **365,449** | 设置页重做：侧栏十项收成七项，通知 / 存储 / 更新 / 全局设置合并为一个设置页，页内 8 个分区（面板 / 外观 / 防护策略 / 通知 / 备份 / 存储 / 更新 / 关于），深链 `#settings/<tab>` + 旧地址重定向；新增界面语言 / 侧栏布局 / 表格密度三项服务端偏好；卡片按钮统一 .card-head / .card-foot 排版；备份清单改定宽表 | 
 | **26.11.5** | **357,966** | 通知渠道 7→11 + 元数据驱动 + 密钥打码 + 双语推送 + 投递记录；新增存储页与清理；新增版本检查与一键更新；8 道工程闸门 + CI 打包发布 |
 
-**当前交付**：`output/fn-fail2ban-26.11.10-all.fpk`（368,640 字节）。**下一个版本号 26.11.11**。
-`report/README-26.11.10.md` 是当前版本的说明；`report/README-26.11.9.md` 是上一版；`report/README-26.11.7.md` 是侧栏左下角那一版；`report/README-26.11.6.md` 是设置页重做的说明，`report/SPEC-26.11.6-设置页重构.md` 是对应的施工图；26.11.5 的说明与施工图在 `report/README-26.11.5.md`、`report/UPGRADE-PLAN-26.11.5.md`。
+**当前交付**：`output/fn-fail2ban-26.11.17-all.fpk`（364,158 字节）。**下一个版本号 26.11.18**。
+`report/README-26.11.17.md` 是当前版本的说明；`report/README-26.11.10.md` 是更新页那一版；`report/README-26.11.9.md` 是上一版；`report/README-26.11.7.md` 是侧栏左下角那一版；`report/README-26.11.6.md` 是设置页重做的说明，`report/SPEC-26.11.6-设置页重构.md` 是对应的施工图；26.11.5 的说明与施工图在 `report/README-26.11.5.md`、`report/UPGRADE-PLAN-26.11.5.md`。
 
 ## 四、包结构与构建
 
@@ -293,3 +294,59 @@ wizard/uninstall, config/privilege, config/resource     ← 完全相同
   要比包内版本号与 strict 检查结果。
 - GitHub API 匿名额度 60 次/小时，很容易打满；打满后更新检查退回 atom 源，
   **那条路径没有资产字节数**，前端必须把 `size=0` 当「未知」而不是「0 B」显示。
+
+
+## 十、一键升级：两条路只有一条通（26.11.17 实测定型）
+
+### 走不通的两种写法
+
+| 命令 | 实际结果 |
+| --- | --- |
+| `appcenter-cli uninstall <app>` | 第三方应用一律被拒：`please uninstall it from Web UI`。**不要再试**，与 install_type / 卷号 / manifest 都无关 |
+| `appcenter-cli install-fpk <fpk>` 对着已装应用 | 只回一句 `Application [x] is installed.`，**文件一个都不动**（比过前后 mtime 与数据库版本） |
+| `uninstall + install-fpk` 组合 | 永远停在第一步 |
+
+### 走得通的写法
+
+```sh
+appcenter-cli install-local -d <解包目录> -e <env文件> -v 1 -a yes
+```
+
+它自己会完成 `stop → uninstall → install`，实测能真正替换应用。三个要点：
+
+1. **吃目录不吃 .fpk**：先把包 `tar -xf` 解开，目录里要有 `manifest` 与 `app.tgz`
+   （fnpack 打的包本来就带 `app.tgz`，install-local 会回
+   `app.tgz exist, no need compress it`）。
+2. **env 文件必须含全部向导字段**：`auto_install / enable_ssh_jail / default_bantime /
+   default_maxretry / default_ignoreip`。少一个就报
+   `Something wrong with environment variables.`，且不说缺哪个。
+3. **升级用的文件不能放 @appdata**：install-local 的第一步就是卸载，会把
+   `/vol1/@appdata/<app>` 整个清空。安装包、env、解包目录放那里 → 卸载完成时它们
+   已经没了 → 安装失败且无回滚，**应用被卸掉装不回来**（真踩过）。
+   正确位置是 `/vol1/@apphome/<app>/update/`：同级目录，卸载时保留。
+   日志留在 `@appdata/<app>/update/install.log`，用户能在存储页看到并清理。
+
+### 两个「校验把自己判死」的坑
+
+- **`.fpk` 外层是未压缩的 tar**，只有内层 `app.tgz` 才 gzip。自检写
+  `tarfile.open(path, "r:gz")` 会把正常包判成「不是 gzip 文件」。用 `"r:*"`。
+- **manifest 的 changelog 不能涨太大**。堆到 13 KB 时 fnpack 打包会折行，
+  manifest 被切成多行，安装器判它不合法 —— 表现是**连卸载都被拒**，
+  而没有任何一条能看懂的报错。changelog 只保留最近两版摘要，
+  `tools/inspect_fpk.py` 里有行结构校验兜底。
+
+### 验证手法（可复用）
+
+设备上起一个本地 HTTP 假源返回 `releases/latest` 与 `.fpk` 资产，把面板用
+`F2B_UPDATE_API_BASE` / `F2B_UPDATE_WEB_BASE` 指过去，然后走面板自己的
+`POST /api/update/install`。这样验的是真实链路，不是手动敲命令。
+
+**造测试包时注意**：`app.tgz` 的内层根必须就是应用目录（`bin/` `web/` 直接在根下），
+用 `( cd app && tar -czf ../app.tgz . )`。用 `tar -czf app.tgz -C app .` 会带上 `./` 前缀，
+自检能过但安装会失败。
+
+### 已知未覆盖
+
+install-local 装完后，应用中心拉起服务偶尔报 `11000`（启动握手超时），此时新版本
+其实已装好。脚本里有「直接用 `/var/apps/<app>/cmd/main start` 兜底」的分支，
+但**这条分支还没被真正走到过**（验证时都是手工启动的）。下次真机升级时要盯一眼。
