@@ -1590,9 +1590,10 @@
     var host = $('#view');
     var active = state.jails.filter(function (j) { return j.active; });
     var all = state.bans.jail === BAN_ALL;
-    // 顶栏已经有「刷新」，这一行不再重复放一个同样的按钮：
-    // 同一屏里两个「刷新」会让人分不清哪个刷新的是哪个范围。
-    var html = '<div class="view-head"><h2>' + t('nav.bans') + '</h2></div>';
+    // 这一页头部原本有一个与顶栏重复的「刷新」，去掉之后整行就空了。
+    // 页面标题由顶栏统一呈现，空着的 .view-head 只会白占 32px 一行高度，
+    // 所以整块不再输出。
+    var html = '';
 
     if (!active.length && !all) {
       host.innerHTML = html + '<div class="card"><div class="empty">' +

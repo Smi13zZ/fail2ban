@@ -38,7 +38,7 @@ import store  # noqa: E402
 import update  # noqa: E402
 
 APP_NAME = os.environ.get("TRIM_APPNAME") or "fn-fail2ban"
-APP_VERSION = "26.11.18"
+APP_VERSION = "26.11.19"
 PORT = int(os.environ.get("TRIM_SERVICE_PORT") or os.environ.get("F2B_PORT") or 18752)
 BIND_ADDR = os.environ.get("F2B_BIND") or "0.0.0.0"
 READY_FILE = os.environ.get("F2B_READYFILE") or os.path.join(store.VAR_DIR, "server.ready")
