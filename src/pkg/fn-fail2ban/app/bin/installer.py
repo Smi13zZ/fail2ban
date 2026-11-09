@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import http.client
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -45,7 +46,10 @@ LOG_TAIL_LINES = 14
 
 # 安装完成后最多观察多久：install-fpk 返回时应用中心往往还没登记完，
 # 版本文件与运行状态都得轮询一阵才可信。
-VERIFY_ATTEMPTS = 20
+#: 装完之后观察多久。每次 appcenter-cli start 自己就要跑十几秒进度条，
+#: 20 轮能把「升级中」拖上两分钟；版本号一变就说明包已经换掉了，
+#: 剩下的只是把服务拉起来，不需要这么多轮。
+VERIFY_ATTEMPTS = 6
 VERIFY_INTERVAL = 3
 
 # appcenter-cli 在 fnOS 上的实际位置。面板由应用框架拉起、PATH 很精简，
@@ -163,7 +167,32 @@ def _percent(done, total):
 # 路径
 # ---------------------------------------------------------------------------
 
+#: install-local 卸载应用时会清空 @appdata，所以升级要用的文件不能放在那里。
+#: @apphome 不会被卸载流程删除，正好用来放这次升级的工作区。
+def _work_dir(var_dir=None):
+    """升级工作区：安装包、向导环境变量、安装脚本、解包目录都放这里。
+
+    必须放在**卸载不会清掉**的位置。install-local 的第一步就是卸载当前应用，
+    它会把 @appdata/<app> 整个清空 —— 如果安装包与 update.env 还在里面，
+    卸载一完成，接下来的安装就找不到它们了，结果是应用被卸掉、装不回来，
+    连回滚包也跟着一起没了。
+    """
+    base = os.environ.get("TRIM_PKGHOME") or ""
+    if not base:
+        raw = var_dir or _CTX.get("var_dir") or os.environ.get("TRIM_PKGVAR") or ""
+        # /vol1/@appdata/<app> → /vol1/@apphome/<app>：同级目录，卸载时保留。
+        # 这里按字面量替换而不是 os.sep 拼接：这段代码可能在 Windows 上跑单测，
+        # os.sep 会是反斜杠，替换就永远匹配不上。
+        base = raw.replace("/@appdata/", "/@apphome/")
+        if base == raw and "@appdata" in raw:
+            base = raw.replace("@appdata", "@apphome")
+    if not base:
+        return ""
+    return base.rstrip("/") + "/update"
+
+
 def _update_dir(var_dir=None):
+    """日志与状态留在 @appdata，用户能在存储页看到并清理。"""
     base = var_dir or _CTX.get("var_dir") or os.environ.get("TRIM_PKGVAR") or ""
     if not base:
         return ""
@@ -387,7 +416,9 @@ def validate_fpk(path, app_name=APP_NAME, appcenter=None, expect_version=None):
     if os.path.getsize(path) == 0:
         raise ValueError("安装包是空文件")
     try:
-        with tarfile.open(path, "r:gz") as tf:
+        # r:* 而不是 r:gz：包的外层是未压缩的 tar，只有内层 app.tgz 才 gzip。
+        # 写死 r:gz 时，一个完全正常的 .fpk 会被判成「不是 gzip 文件」。
+        with tarfile.open(path, "r:*") as tf:
             names = tf.getnames()
             # fnpack 总会写这两个；缺任何一个，说明要么不是这种包，要么包是坏的。
             if "manifest" not in names:
@@ -507,6 +538,7 @@ ENVF="@ENVF@"
 AC="@AC@"
 TARGET="@VERSION@"
 MANIFEST="@MANIFEST@"
+WORK="@WORK@"
 
 installed() {
   [ -f "$MANIFEST" ] || return 0
@@ -533,24 +565,42 @@ echo "=== stop $APP ==="
 "$AC" stop "$APP" 2>&1 || true
 sleep 1
 
-echo "=== uninstall $APP ==="
-"$AC" uninstall "$APP" 2>&1 || true
-sleep 3
-
-echo "=== install $PKG ==="
-"$AC" install-fpk "$PKG" -e "$ENVF" -v 1 2>&1 || true
+# 用 install-local 而不是「uninstall + install-fpk」：
+#   * appcenter-cli uninstall 对第三方应用一律被拒（"please uninstall it
+#     from Web UI"），这一步永远做不成；
+#   * install-fpk 对着已安装的应用只会回一句 "is installed"，什么都不做；
+#   * install-local 自己会先 stop → uninstall → install，而且这条路径是被
+#     允许的（实测它能真把应用换掉）。
+# 包先解到临时目录，因为 install-local 吃的是目录而不是 .fpk。
+WORK="@WORK@"
+rm -rf "$WORK"
+mkdir -p "$WORK"
+if tar -xf "$PKG" -C "$WORK" 2>&1 && [ -f "$WORK/manifest" ]; then
+  echo "=== install-local from $WORK ==="
+  "$AC" install-local -d "$WORK" -e "$ENVF" -v 1 -a yes 2>&1 || true
+else
+  # 解包失败就退回老的 install-fpk：至少还有一条路能试。
+  echo "=== unpack failed, falling back to install-fpk ==="
+  "$AC" uninstall "$APP" 2>&1 || true
+  sleep 3
+  "$AC" install-fpk "$PKG" -e "$ENVF" -v 1 2>&1 || true
+fi
 
 # install-fpk 返回时应用中心往往还没登记完，所以两个结论都得轮询：
 # 已安装的版本号是不是新版本，以及服务有没有起来。
+# start 只在「版本号已经是目标、但服务没起」时才发一次 —— install-local 自己
+# 启动失败后再反复.start 只会把日志刷满进度条，不会带来新结果。
 n=0
 got=""
+started_once=0
 while [ "$n" -lt @ATTEMPTS@ ]; do
   got=$(installed)
   if [ "$got" = "$TARGET" ] && started; then
     break
   fi
-  if [ "$got" = "$TARGET" ] && [ "$n" -ge 1 ]; then
+  if [ "$got" = "$TARGET" ] && [ "$started_once" = "0" ]; then
     "$AC" start "$APP" 2>&1 || true
+    started_once=1
   fi
   sleep @INTERVAL@
   n=$((n + 1))
@@ -570,6 +620,19 @@ if [ "$got" = "$TARGET" ]; then
     echo "=== 已升级到 $TARGET ==="
     exit 0
   fi
+  # 应用中心报 11000（拉起超时）时，其实 cmd/main 自己就能把服务带起来 ——
+  # 面板的启动脚本会把 pid/ready 写好，只是应用中心的握手已经先超时了。
+  # 版本号已经是目标版本，这里补一次直接启动，别让一次握手超时被当成升级失败。
+  echo "=== 应用中心拉起超时，直接用 cmd/main 启动 ==="
+  MAIN="@MAIN@"
+  if [ -x "$MAIN" ]; then
+    "$MAIN" start 2>&1 || true
+    sleep 6
+    if started; then
+      echo "=== 已升级到 $TARGET（由 cmd/main 启动） ==="
+      exit 0
+    fi
+  fi
 fi
 
 echo "=== 升级没有成功（当前已安装版本：${got:-无}） ==="
@@ -587,7 +650,13 @@ fi
 
 if [ -n "$PREV" ] && [ -f "$PREV" ]; then
   echo "=== 回滚到上一个版本 ==="
-  "$AC" install-fpk "$PREV" -e "$ENVF" -v 1 2>&1 || true
+  rm -rf "$WORK"
+  mkdir -p "$WORK"
+  if tar -xf "$PREV" -C "$WORK" 2>&1 && [ -f "$WORK/manifest" ]; then
+    "$AC" install-local -d "$WORK" -e "$ENVF" -v 1 -a yes 2>&1 || true
+  else
+    "$AC" install-fpk "$PREV" -e "$ENVF" -v 1 2>&1 || true
+  fi
   sleep 3
   "$AC" start "$APP" 2>&1 || true
   echo "=== 已尝试回滚，当前版本：$(installed) ==="
@@ -599,7 +668,7 @@ exit 1
 
 
 def build_script(version, pkg, prev, log_path, env_path, appcenter,
-                 manifest=""):
+                 manifest="", work_dir=""):
     """渲染分离执行的安装脚本。
 
     单独成一个函数，脚本文本才能在不执行的情况下被断言；同时路径为空这类
@@ -626,6 +695,15 @@ def build_script(version, pkg, prev, log_path, env_path, appcenter,
         "ENVF": str(env_path),
         "AC": str(appcenter),
         "MANIFEST": str(manifest or (INSTALL_MANIFEST % APP_NAME)),
+        # install-local 吃目录不吃 .fpk，包要先解到这里。这个目录必须在卸载
+        # 时保留：install-local 的第一步就是卸载当前应用，@appdata 会被清空，
+        # 而安装包与 update.env 此刻正在被安装流程使用。
+        "WORK": str(work_dir or "") + "/unpacked" if work_dir else
+                posixpath.dirname(str(pkg).replace("\\", "/")) + "/unpacked",
+        # 应用中心拉起服务偶尔会报 11000（握手超时），这时 cmd/main 往往还能
+        # 把服务带起来。路径从 appcenter-cli 推：.../@appcenter/<app> 对应的
+        # 入口脚本在 /var/apps/<app>/cmd/main。
+        "MAIN": "/var/apps/%s/cmd/main" % APP_NAME,
         "ATTEMPTS": str(int(VERIFY_ATTEMPTS)),
         "INTERVAL": str(int(VERIFY_INTERVAL)),
     }
@@ -761,6 +839,13 @@ def install(version, url, var_dir, current, *, appcenter="", prev_fpk="",
     except OSError as exc:
         return {"ok": False, "error": "无法创建更新目录：%s" % exc}
 
+    # 升级用的文件放到卸载不会清的位置（见 _work_dir 的说明）。
+    workdir = _work_dir(var_dir) or updir
+    try:
+        os.makedirs(workdir, exist_ok=True)
+    except OSError as exc:
+        return {"ok": False, "error": "无法创建升级工作目录：%s" % exc}
+
     cli = _find_appcenter(appcenter or "")
     if not cli:
         return {"ok": False, "error": "找不到 appcenter-cli，无法自动安装"}
@@ -775,7 +860,7 @@ def install(version, url, var_dir, current, *, appcenter="", prev_fpk="",
 
     def worker():
         try:
-            _run_install(target, url, os.path.join(updir, name), updir, cli,
+            _run_install(target, url, os.path.join(workdir, name), workdir, updir, cli,
                          current, prev_fpk, settings, spawn, timeout, limit)
         except Exception as exc:  # noqa: BLE001 - 后台线程必须自己收尾
             _set("failed", target, "升级失败：%s" % exc)
@@ -786,10 +871,15 @@ def install(version, url, var_dir, current, *, appcenter="", prev_fpk="",
             "file": name, "script": "", "rollback": False}
 
 
-def _run_install(target, url, dest, updir, cli, current, prev_fpk, settings,
+def _run_install(target, url, dest, updir, logdir, cli, current, prev_fpk, settings,
                  spawn, timeout, limit):
-    """后台线程的主体：下载 → 校验 → 写脚本 → 分离执行。"""
-    log_path = os.path.join(updir, "install.log")
+    """后台线程的主体：下载 → 校验 → 写脚本 → 分离执行。
+
+    updir 是卸载后仍然保留的工作区（安装包、env、脚本、解包目录都在这里）；
+    logdir 是 @appdata 下的 update/，只放日志 —— 那份日志要留在用户能看到、
+    能被存储页统计与清理的地方。
+    """
+    log_path = os.path.join(logdir, "install.log")
     env_path = os.path.join(updir, "update.env")
 
     def on_progress(done, total):
@@ -824,7 +914,8 @@ def _run_install(target, url, dest, updir, cli, current, prev_fpk, settings,
     try:
         write_wizard_env(env_path, settings)
         text = build_script(info.get("version") or target, dest, prev,
-                            log_path, env_path, info.get("appcenter") or cli)
+                            log_path, env_path, info.get("appcenter") or cli,
+                            work_dir=os.path.dirname(dest))
         with open(script, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(text)
         os.chmod(script, 0o755)
