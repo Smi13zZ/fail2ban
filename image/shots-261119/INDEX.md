@@ -1,6 +1,6 @@
 # 截图索引（面板 26.11.19）
 
-- 生成时间：2026-11-09 20:50:54
+- 生成时间：2026-11-09 21:05:52
 - 面板地址：http://127.0.0.1:18752/
 - 浏览器：Chrome/156.0.8078.73（CDP 直连，不走 --screenshot）
 - 主题：跟随系统（此环境解出浅色） ／ 语言：zh
@@ -32,7 +32,7 @@
 | `desktop-settings-notify.png` | 设置 · notify | 1440×1216 | 设置 · 通知：6 张卡片、3 处空状态、22 个按钮、侧栏 7 项、标题：总开关 / 通知事件 / 服务状态 / 通知渠道 | — |
 | `desktop-settings-backup.png` | 设置 · backup | 1440×900 | 设置 · 备份：1 张卡片、5 行表格、18 个按钮、侧栏 7 项、标题：自动备份 | — |
 | `desktop-settings-storage.png` | 设置 · storage | 1440×1346 | 设置 · 存储：2 张卡片、17 行表格、17 个按钮、侧栏 7 项、标题：空间占用 / 备份文件 (5) | — |
-| `desktop-settings-update.png` | 设置 · update | 1440×900 | 设置 · 更新：1 张卡片、11 个按钮、侧栏 7 项、标题：版本与更新 | — |
+| `desktop-settings-update.png` | 设置 · update | 1440×1029 | 设置 · 更新：1 张卡片、10 个按钮、侧栏 7 项、标题：版本与更新 | — |
 | `desktop-settings-guide.png` | 设置 · guide | 1440×1823 | 设置 · 说明：3 张卡片、25 个按钮、侧栏 7 项、标题：面板 / fail2ban 系统文件 / 敲门（fn-knock）联动文件 | — |
 | `desktop-settings-about.png` | 设置 · about | 1440×900 | 设置 · 关于：1 张卡片、9 个按钮、侧栏 7 项、标题：关于面板 | — |
 | `desktop-logs.png` | 日志 | 1440×900 | 日志：1 张卡片、3 个按钮、侧栏 7 项、标题：日志 | — |
@@ -61,7 +61,7 @@
 | `mobile-settings-notify.png` | 设置 · notify | 780×3886 | 设置 · 通知：6 张卡片、3 处空状态、22 个按钮、侧栏 7 项、标题：总开关 / 通知事件 / 服务状态 / 通知渠道 | — |
 | `mobile-settings-backup.png` | 设置 · backup | 780×2558 | 设置 · 备份：1 张卡片、5 行表格、18 个按钮、侧栏 7 项、标题：自动备份 | — |
 | `mobile-settings-storage.png` | 设置 · storage | 780×3052 | 设置 · 存储：2 张卡片、17 行表格、17 个按钮、侧栏 7 项、标题：空间占用 / 备份文件 (5) | — |
-| `mobile-settings-update.png` | 设置 · update | 780×1950 | 设置 · 更新：1 张卡片、11 个按钮、侧栏 7 项、标题：版本与更新 | — |
+| `mobile-settings-update.png` | 设置 · update | 780×2410 | 设置 · 更新：1 张卡片、10 个按钮、侧栏 7 项、标题：版本与更新 | — |
 | `mobile-settings-guide.png` | 设置 · guide | 780×4278 | 设置 · 说明：3 张卡片、25 个按钮、侧栏 7 项、标题：面板 / fail2ban 系统文件 / 敲门（fn-knock）联动文件 | — |
 | `mobile-settings-about.png` | 设置 · about | 780×1688 | 设置 · 关于：1 张卡片、9 个按钮、侧栏 7 项、标题：关于面板 | — |
 | `mobile-logs.png` | 日志 | 780×1840 | 日志：1 张卡片、3 个按钮、侧栏 7 项、标题：日志 | — |
@@ -98,44 +98,26 @@
 - **面板**：6 行
   - 监听地址 → 0.0.0.0:18752
   - 界面目录 → /vol1/@appcenter/fn-fail2ban/web
-复制路径
   - 数据目录 → /vol1/@appdata/fn-fail2ban
-复制路径
   - 配置目录 → /vol1/@appconf/fn-fail2ban
-复制路径
   - 备份目录 → /vol1/@appdata/fn-fail2ban/backup
-复制路径
   - 日志文件 → /var/log/fail2ban.log
-复制路径
 - **fail2ban 系统文件**：9 行
   - 托管配置（本应用写入） → /etc/fail2ban/jail.d/50-fn-fail2ban.local
-复制路径
   - 配置读取顺序 → /etc/fail2ban/jail.conf → /etc/fail2ban/jail.d/defaults-debian.conf → /etc/fail2ban/jail.d/50-fn-fail2ban.local
-  - jail.conf（系统自带）
-fail2ban 系统文件 → /etc/fail2ban/jail.conf
-复制路径
-  - jail.local（系统自带）
-fail2ban 系统文件 → /etc/fail2ban/jail.local
-复制路径
+  - jail.conf（系统自带）fail2ban 系统文件 → /etc/fail2ban/jail.conf
+  - jail.local（系统自带）fail2ban 系统文件 → /etc/fail2ban/jail.local
   - jail.d 目录 → /etc/fail2ban/jail.d
-复制路径
   - filter.d 目录 → /etc/fail2ban/filter.d
-复制路径
   - action.d 目录 → /etc/fail2ban/action.d
-复制路径
   - 控制套接字 → /run/fail2ban/fail2ban.sock
   - 命令行工具 → /usr/bin/fail2ban-client
 - **敲门（fn-knock）联动文件**：5 行
   - 管理接口地址 → http://127.0.0.1:7998
-复制路径
   - 数据目录 → /var/apps/fn-knock/var
-复制路径
   - 封禁动作文件 → /etc/fail2ban/action.d/fnknock.local
-复制路径
   - 过滤器文件 → /etc/fail2ban/filter.d/fnknock-gateway.local
-复制路径
   - 联动 Jail 日志 → /usr/local/etc/fn-knock/logs/*.log
-复制路径
 
 ### 更新页版本对比箭头（desktop）
 
@@ -151,8 +133,8 @@ fail2ban 系统文件 → /etc/fail2ban/jail.local
 | --- | --- | --- | --- | --- | --- | --- |
 | `desktop-update-overlay-download.png` | 升级遮罩 · 下载中（有真实字节数） | 有 | 143.4 KB / 357.5 KB | 40% | 正在下载安装包 | 有 |
 | `mobile-update-overlay-download.png` | 升级遮罩 · 下载中（有真实字节数） | 有 | 143.4 KB / 357.5 KB | 40% | 正在下载安装包 | 有 |
-| `desktop-update-overlay-preparing.png` | 升级遮罩 · 无总量态（准备中…） | 无 | 0 B / 357.5 KB | — | 正在安装新版本 | 有 |
-| `mobile-update-overlay-preparing.png` | 升级遮罩 · 无总量态（准备中…） | 无 | 0 B / 357.5 KB | — | 正在安装新版本 | 有 |
+| `desktop-update-overlay-preparing.png` | 升级遮罩 · 无总量态（准备中…） | 无 | — | — | 正在安装新版本 | 有 |
+| `mobile-update-overlay-preparing.png` | 升级遮罩 · 无总量态（准备中…） | 无 | — | — | 正在安装新版本 | 有 |
 | `desktop-update-overlay-installing.png` | 升级遮罩 · 下载满格后切安装（保留 100%） | 有 | — | 100% | 正在安装新版本 | 有 |
 | `mobile-update-overlay-installing.png` | 升级遮罩 · 下载满格后切安装（保留 100%） | 有 | — | 100% | 正在安装新版本 | 有 |
 
