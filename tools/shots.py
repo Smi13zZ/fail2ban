@@ -173,7 +173,7 @@ METRICS_JS = r"""(function(){
 })()"""
 
 
-# ------------------------------------------------------------- 升级遮罩两态 ---
+# ------------------------------------------------------------- 升级遮罩三态 ---
 # 一键升级的遮罩无法靠普通访问触发：要点「一键更新」，而那个按钮只在
 # has_update 时出现。这里在页面里先替换 window.fetch 把两个接口伪造掉，
 # 让遮罩按真实代码路径渲染出来 —— 不碰设备上的任何文件，也不会真的安装。
@@ -192,6 +192,7 @@ FAKE_UPDATE_JS = r"""(function(){
   window.__f2bFrameIndex = 0;
   window.__f2bInstallHits = 0;
   var cur = '%(current)s';
+  var LATEST = '%(latest)s';
   function json(obj){
     return Promise.resolve(new Response(JSON.stringify(obj), {
       status: 200, headers: {'Content-Type':'application/json'}
@@ -201,7 +202,7 @@ FAKE_UPDATE_JS = r"""(function(){
     var url = String((input && input.url) || input || '');
     var path = url.split('?')[0];
     if (/\/api\/update$/.test(path)) {
-      return json({ok:true, current:cur, latest:'26.11.19', has_update:true,
+      return json({ok:true, current:cur, latest:LATEST, has_update:true,
         repo:'Smi13zZ/fail2ban', notes:'（截图用假数据）', assets:[
           {name:'fn-fail2ban-26.11.19-all.fpk', size:366074}],
         checked_at: Math.floor(Date.now()/1000), published_at:'2026-11-09'});
@@ -271,12 +272,32 @@ OVERLAY_STATES = [
 GUIDE_JS = r"""(function(){
   var cards = [].slice.call(document.querySelectorAll('#view .card')).map(function(card){
     var h = card.querySelector('.card-head h3') || card.querySelector('h3');
+    // 取纯文本：.pathrow-v 里除了值还塞着「复制路径」按钮，innerText 会把按钮文字
+    // 一起卷进来，INDEX.md 里就变成两行。这里直接读文本节点 / .mono 的内容。
+    var plain = function(node){
+      if (!node) return '';
+      var mono = node.querySelector('.mono');
+      if (mono) return (mono.innerText||'').trim();
+      var out = '';
+      [].slice.call(node.childNodes).forEach(function(n){
+        if (n.nodeType === 3) out += n.nodeValue;
+        else if (n.nodeType === 1 && n.tagName.toLowerCase() !== 'button' &&
+                 !n.classList.contains('badge')) out += (n.innerText||'');
+      });
+      return out.replace(/\s+/g, ' ').trim();
+    };
     var rows = [].slice.call(card.querySelectorAll('.pathrow')).map(function(row){
       var k = row.querySelector('.pathrow-k');
       var v = row.querySelector('.pathrow-v');
+      var key = '';
+      if (k) {
+        var kc = k.cloneNode(true);
+        [].slice.call(kc.querySelectorAll('.badge')).forEach(function(b){ b.remove(); });
+        key = (kc.innerText||'').trim().split('\n')[0];
+      }
       return {
-        k: k ? (k.innerText||'').trim() : '',
-        v: v ? (v.innerText||'').trim() : '',
+        k: key,
+        v: plain(v),
         mono: !!(v && v.querySelector('.mono'))
       };
     });
@@ -416,8 +437,10 @@ OVERLAY_METRICS_JS = r"""(function(){
     readyVisible: visible(ready),
     readyText: ((ready||{}).innerText||'').trim(),
     fillWidthPct: fill?String(fill.style.width||''):'',
-    pctText: ((pct||{}).innerText||'').trim(),
-    bytesText: ((bytes||{}).innerText||'').trim(),
+    // 进度条隐藏时它的文字节点还留在 DOM 里（上一阶段的残留值），
+    // 直接读会报出一个屏幕上根本看不到的字节数。只在轨道可见时才算数。
+    pctText: visible(track) ? ((pct||{}).innerText||'').trim() : '',
+    bytesText: visible(track) ? ((bytes||{}).innerText||'').trim() : '',
     keepVisible: visible(keep),
     keepText: ((keep||{}).innerText||'').trim(),
     spinRect: rect(spin),
@@ -626,9 +649,33 @@ class Chrome(object):
         }, self.session)
 
     def seed_script(self, script):
-        if script:
-            self.cdp.call('Page.addScriptToEvaluateOnNewDocument',
-                          {'source': script}, self.session)
+        """注入到每个新文档。返回 identifier，便于之后移除。
+        注意：一旦注入就会对**后续所有**导航生效，所以只能给需要它的阶段用，
+        否则会把伪造的接口状态带进正常的页面截图。"""
+        if not script:
+            return None
+        res = self.cdp.call('Page.addScriptToEvaluateOnNewDocument',
+                            {'source': script}, self.session)
+        return res.get('identifier')
+
+    def unseed_script(self, identifier):
+        if not identifier:
+            return
+        try:
+            self.cdp.call('Page.removeScriptToEvaluateOnNewDocument',
+                          {'identifier': identifier}, self.session)
+        except Exception:
+            pass
+
+
+def _bump_patch(version):
+    """把版本号最后一段 +1，用来给遮罩的假「最新版本」用。
+    必须与当前版本不同，否则版本对比区会显示成两个一样的号。"""
+    parts = str(version or '').split('.')
+    if parts and parts[-1].isdigit():
+        parts[-1] = str(int(parts[-1]) + 1)
+        return '.'.join(parts)
+    return '99.99.99'
 
 
 def wait_until(fn, timeout, interval=0.15):
@@ -794,18 +841,6 @@ def device_main(argv):
             chrome.set_theme(plan['theme'])
         chrome.seed_script('(function(){%s})();' % ';'.join(seed))
 
-        # 遮罩两态需要在页面里伪造 update 接口；其余截图不受影响
-        if plan.get('extras'):
-            meta_now = {}
-            try:
-                import urllib.request
-                with urllib.request.urlopen(url + 'api/meta', timeout=10) as resp:
-                    meta_now = json.loads(resp.read().decode('utf-8'))
-            except Exception:
-                meta_now = {}
-            cur_ver = (meta_now.get('app') or {}).get('version', '')
-            chrome.seed_script(FAKE_UPDATE_JS % {'current': cur_ver})
-
         log('[1/3] 发现页面结构 ...')
         found = discover(chrome, url, timeout)
         log('      导航 %d 项 / 设置分区 %d 个 / fnknock 分区 %d 个'
@@ -886,11 +921,23 @@ def device_main(argv):
                 if entry.get('ok'):
                     log('      %-34s %4dpx 高 %5dms' % (tag, entry.get('pngH', 0), entry['ms']))
 
-        # ---- 升级遮罩两态（可选）：伪造 update 接口后在页面里点「一键更新」----
+        # ---- 升级遮罩三态（可选）：伪造 update 接口后在页面里点「一键更新」----
         # 遮罩只能由点击触发，所以先让页面里的 fetch 返回假的 has_update，
         # 再点按钮，然后按脚本给出的进度帧停在指定阶段截图。
         if plan.get('extras'):
-            log('      升级遮罩两态 ...')
+            log('      升级遮罩 ...')
+            # 伪造脚本从这里才开始注入：早注入会把假 has_update 带进
+            # 正常的「设置 · 更新」截图，那张图必须反映真实后端状态。
+            meta_now = {}
+            try:
+                import urllib.request
+                with urllib.request.urlopen(url + 'api/meta', timeout=10) as resp:
+                    meta_now = json.loads(resp.read().decode('utf-8'))
+            except Exception:
+                meta_now = {}
+            cur_ver = (meta_now.get('app') or {}).get('version', '')
+            fake_id = chrome.seed_script(
+                FAKE_UPDATE_JS % {'current': cur_ver, 'latest': _bump_patch(cur_ver)})
             for state in OVERLAY_STATES:
                 for vp_name in plan['viewports']:
                     seq += 1
@@ -950,6 +997,7 @@ def device_main(argv):
                     results.append(entry)
                     log('      %-40s %s' % (tag, 'OK' if entry.get('ok')
                                             else 'FAIL: ' + str(entry.get('error') or entry.get('readyWhy'))))
+            chrome.unseed_script(fake_id)
     finally:
         try:
             chrome.close()
@@ -1596,7 +1644,7 @@ def main(argv):
     ap.add_argument('--expect', action='store_true',
                     help='按本版重点逐项硬核对（说明页 3 卡 20 行 / 侧栏 7 项顺序 / 封禁页无空行）')
     ap.add_argument('--extras', action='store_true',
-                    help='额外截升级遮罩两态（页面内伪造 update 接口，不会真的安装）')
+                    help='额外截升级遮罩三态（页面内伪造 update 接口，不会真的安装）')
     ap.add_argument('--repeat', type=int, default=1,
                     help='重复跑几遍做稳定性比对（默认 1；验收建议 2）')
     ap.add_argument('--keep-remote', action='store_true', help='保留设备上的临时目录')
