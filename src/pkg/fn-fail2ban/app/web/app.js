@@ -3057,6 +3057,21 @@
     unknown_current: 'update.reasonUnknownCurrent'
   };
 
+  // 数值段比较：26.11.10 要判为高于 26.11.9（字符串比较会判反）。
+  function compareVersions(a, b) {
+    var pa = String(a || '').replace(/^v/i, '').split('.');
+    var pb = String(b || '').replace(/^v/i, '').split('.');
+    var n = Math.max(pa.length, pb.length);
+    for (var i = 0; i < n; i += 1) {
+      var x = parseInt(pa[i], 10);
+      var y = parseInt(pb[i], 10);
+      if (isNaN(x)) x = 0;
+      if (isNaN(y)) y = 0;
+      if (x !== y) return x > y ? 1 : -1;
+    }
+    return 0;
+  }
+
   function updateInfo() {
     return state.update.info || null;
   }
@@ -3072,6 +3087,20 @@
     return text;
   }
 
+  // 状态条图标：已最新用四角星，发现新版本用星芒，检查失败用感叹号。
+  function updateStatusIcon(kind) {
+    var open = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+      'stroke-linecap="round" stroke-linejoin="round">';
+    if (kind === 'fresh') {
+      return open + '<path d="M12 3.5l2.1 5.2 5.6.4-4.3 3.6 1.4 5.4-4.8-3-4.8 3 1.4-5.4-4.3-3.6 5.6-.4z"/></svg>';
+    }
+    if (kind === 'failed') {
+      return open + '<circle cx="12" cy="12" r="8.5"/><path d="M12 8v5"/><path d="M12 16.2v.01"/></svg>';
+    }
+    return open + '<path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/>' +
+      '<path d="M18 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>';
+  }
+
   function updateAssetsHtml(info) {
     // Release 里可能挂着别的东西（校验文件、源码包），只有 .fpk 才是安装包
     var assets = (info.assets || []).filter(function (item) {
@@ -3082,14 +3111,15 @@
     if (!assets.length) return '';
     // size 为 0 表示「没拿到大小」，不是「文件是空的」：
     // GitHub 接口被限流后走的是发布订阅源，那条路径只有下载链接没有字节数。
-    // 显示 0 B 会让用户以为包是坏的，所以直接不显示这一列。
-    return '<div class="section-title">' + t('update.assets') + '</div><dl class="kv">' +
+    return '<div class="section-title">' + t('update.assets') + '</div>' +
+      '<div class="assetlist">' +
       assets.map(function (item) {
         var size = Number(item.size) || 0;
-        return kv(item.name || '—', size > 0
-          ? '<span class="dim">' + esc(fmtSize(size)) + '</span>'
-          : '<span class="dim">' + esc(t('update.sizeUnknown')) + '</span>');
-      }).join('') + '</dl>';
+        return '<div class="assetrow"><span class="aname mono">' +
+          esc(item.name || '—') + '</span><span class="asize dim">' +
+          (size > 0 ? esc(fmtSize(size)) : esc(t('update.sizeUnknown'))) +
+          '</span></div>';
+      }).join('') + '</div>';
   }
 
   function renderUpdate(embedded) {
@@ -3098,72 +3128,101 @@
     $('#view').innerHTML = '<div class="view-head"><h2>' + t('nav.update') + '</h2></div>' + body;
   }
 
+  // 一句话说明 + 单张卡片：卡片头带「打开发布页面」，版本对比与状态条在卡片里，
+  // 说明与仓库信息在下面 —— 整页只有一张卡，不散成多个 fragment。
   function updateHtml() {
     var info = updateInfo();
-    var html = '<div class="help">' + esc(t('update.hint')) + '</div>' +
-      '<div class="toolbar"><div class="spacer"></div>' +
-      '<div class="vactions">' +
-      '<button class="btn sm" data-act="update-check"' +
-      (state.update.checking ? ' disabled' : '') + '>' +
-      (state.update.checking ? t('update.checking') : t('update.check')) + '</button>' +
-      '<button class="btn sm primary" data-act="update-install"' +
-      (info && info.has_update ? '' : ' disabled') + '>' + t('update.install') + '</button>' +
-      '</div></div>';
-
-    html += '<div class="card">';
-    if (!info) {
-      return html + '<div class="empty">' + t('update.checking') + '</div></div>';
-    }
-
-    var current = info.current || (state.meta && state.meta.app && state.meta.app.version) || '—';
-    var latest = info.latest || (info.ok ? current : t('update.unknown'));
-    var hasUpdate = !!info.has_update;
+    var current = (info && info.current) ||
+      (state.meta && state.meta.app && state.meta.app.version) || '—';
+    var hasUpdate = !!(info && info.has_update);
+    var latest = (info && info.latest) || (info && info.ok ? current : '—');
+    // 本地版本可能高于线上最新（装了还没发布的内测包）：这时「最新版本」
+    // 显示线上那个更低的号会让人误以为要降级，直接跟当前版本对齐。
+    if (latest !== '—' && compareVersions(latest, current) < 0) latest = current;
     // not_checked 是「还没查过」，不是失败：面板刚启动时会短暂出现
-    var failed = info.ok === false && !!info.reason && info.reason !== 'not_checked';
+    var failed = !!(info && info.ok === false && info.reason && info.reason !== 'not_checked');
+    var checking = !!state.update.checking;
 
+    var html = '<div class="help">' + esc(t('update.hint')) + '</div>';
+
+    var releaseUrl = (info && info.html_url) || '';
+    if (!releaseUrl) {
+      var repoSlug = (info && info.repo) || 'Smi13zZ/fail2ban';
+      releaseUrl = 'https://github.com/' + repoSlug + '/releases';
+    }
+    html += '<div class="card">' + cardHead(t('update.title'),
+      '<a class="btn sm" href="' + esc(releaseUrl) + '" target="_blank" ' +
+      'rel="noopener noreferrer">' + t('update.release') + '</a>') +
+      '<div class="help help-tight">' + esc(t('update.desc')) + '</div>';
+
+    // 当前 -> 最新
     html += '<div class="vhero">' +
       '<div class="vcol"><div class="vk">' + t('update.current') + '</div>' +
-      '<div class="vv mono">' + esc(current) + '</div></div>' +
+      '<div class="vv mono">v' + esc(current) + '</div></div>' +
       '<div class="varrow" aria-hidden="true">' +
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
       'stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>' +
       '</div>' +
       '<div class="vcol"><div class="vk">' + t('update.latest') + '</div>' +
-      '<div class="vv mono' + (hasUpdate ? ' fresh' : '') + '">' + esc(latest) + '</div></div>' +
+      '<div class="vv mono' + (hasUpdate ? ' fresh' : '') + '">' +
+      (latest && latest !== '—' ? 'v' + esc(latest) : '—') + '</div></div>' +
       '</div>';
 
-    // 状态条：只有「发现新版本」着色，其余（已最新 / 检查失败）都走中性色
-    var reasonKey = UPDATE_REASON_KEYS[String(info.reason || '')];
-    var reasonText = reasonKey ? t(reasonKey)
-      : localizedSource(info.detail || info.error, 'common.unknownError');
-    var statusText;
-    if (failed) statusText = t('update.checkFailed');
-    else if (hasUpdate) statusText = t('update.hasUpdate', { version: latest });
-    else statusText = t('update.upToDate');
+    // 状态条：标题 + 副标题 + 右侧两个动作（检查 / 一键更新）
+    var title, sub, tone;
+    if (failed) {
+      title = t('update.checkFailed');
+      var reasonKey = UPDATE_REASON_KEYS[String(info.reason || '')];
+      sub = reasonKey ? t(reasonKey) : localizedSource(info.detail || info.error, 'common.unknownError');
+      tone = '';
+    } else if (hasUpdate) {
+      title = t('update.newTitle');
+      sub = t('update.newSub');
+      tone = ' has';
+    } else {
+      title = t('update.upTitle');
+      sub = t('update.upSub');
+      tone = '';
+    }
 
-    html += '<div class="vstatus' + (hasUpdate ? ' has' : '') + '">' +
-      '<span class="vsic">' + (hasUpdate ? VS_ICONS.fresh : VS_ICONS.idle) + '</span>' +
-      '<div class="vstext"><b>' + esc(statusText) + '</b>' +
-      (failed && reasonText ? '<span>' + esc(reasonText) + '</span>' : '') +
-      (info.repo ? '<span>' + esc(t('update.repo')) + ': <span class="mono">' +
-        esc(info.repo) + '</span>' +
-        (info.checked_at ? ' · ' + esc(t('update.checkedAt', {
-          t: fmtTime(Number(info.checked_at)) })) : '') +
-        (info.cached ? ' · ' + esc(t('update.cachedHint')) : '') +
-        '</span>' : '') +
+    html += '<div class="vstatus' + tone + '">' +
+      '<span class="vsic">' + updateStatusIcon(failed ? 'failed' : (hasUpdate ? 'fresh' : 'idle')) + '</span>' +
+      '<div class="vstext"><b>' + esc(title) + '</b>' +
+      (sub ? '<span>' + esc(sub) + '</span>' : '') + '</div>' +
+      '<div class="vactions">' +
+      '<button class="btn sm" data-act="update-check"' + (checking ? ' disabled' : '') + '>' +
+      (checking ? t('update.checking') : t('update.check')) + '</button>' +
+      (hasUpdate
+        ? '<button class="btn sm primary" data-act="update-install">' + t('update.install') + '</button>'
+        : '') +
       '</div></div>';
 
-    html += '<div class="section-title">' + t('update.notes') + '</div>';
-    if (info.notes) {
-      html += '<div class="help" style="white-space:pre-wrap;line-height:1.65">' +
-        esc(info.notes) + '</div>';
+    // 版本更新说明：可滚动、限高，长 changelog 不会把卡片撑成一屏多
+    html += '<div class="sep"></div><div class="section-title">' + t('update.notes') + '</div>';
+    if (info && info.notes) {
+      html += '<div class="relnotes">' + esc(info.notes) + '</div>';
     } else {
-      html += '<div class="empty">' + t('update.notesEmpty') + '</div>';
+      html += '<div class="faint">' + t('update.notesEmpty') + '</div>';
     }
-    html += updateAssetsHtml(info);
+
+    html += updateAssetsHtml(info || {});
+
+    // 仓库 / 上次检查 / 发布时间
+    html += '<div class="sep"></div><dl class="kv">' +
+      kv(t('update.repo'), '<span class="mono">' + esc((info && info.repo) || '—') + '</span>') +
+      kv(t('update.checkedLabel'), info && info.checked_at
+        ? esc(t('update.checkedAt', { t: fmtTime(Number(info.checked_at)) })) +
+          (info && info.cached ? ' · ' + esc(t('update.cachedHint')) : '')
+        : esc(t('update.neverChecked'))) +
+      kv(t('update.publishedAt'), esc(info && info.published_at
+        ? String(info.published_at).slice(0, 10) : '—')) +
+      '</dl>';
+
+    html += '<div class="help">' + esc(t('update.autoCheck')) + '</div>';
     html += '</div>';
     return html;
   }
+
 
   function paintUpdateDot() {
     var dot = $('#navUpdateDot');
