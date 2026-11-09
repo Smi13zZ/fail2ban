@@ -37,12 +37,13 @@
 | 26.11.2 | 212,060 | 面板内图标换成自身资源（修豆腐块） |
 | 26.11.3 | 266,028 | i18n 中英文全量切换、主题图标按钮、删概览标题行、侧栏只留应用名 |
 | 26.11.4 | 291,407 | 新黑白盾牌九档图标、删侧栏品牌行、表格固定列宽、排序独立控件；顺带修 3 个缺陷 |
+| **26.11.9** | **366,940** | 应用信息与发布渠道：开发者/发布者改为 Smi1ezZ、主页指向仓库；应用中心数据库（PostgreSQL appcenter.app）版本与作者同步；GitHub 仓库上线并发布 v26.11.8/v26.11.9；更新页拿不到包大小时显示「大小未知」而非 0 B | 
 | **26.11.7** | **366,587** | 侧栏左下角对齐：主题（显示器/月亮/太阳）、语言（文/A）、折叠（方框+竖线+箭头）三个图标统一 18px 笔触；版本行加地球图标并并列显示引擎版本 `v26.11.7 · Fail2ban 1.0.2`；去掉语言角标；收起态按钮保持 34×34 方形竖排 | 
 | **26.11.6** | **365,449** | 设置页重做：侧栏十项收成七项，通知 / 存储 / 更新 / 全局设置合并为一个设置页，页内 8 个分区（面板 / 外观 / 防护策略 / 通知 / 备份 / 存储 / 更新 / 关于），深链 `#settings/<tab>` + 旧地址重定向；新增界面语言 / 侧栏布局 / 表格密度三项服务端偏好；卡片按钮统一 .card-head / .card-foot 排版；备份清单改定宽表 | 
 | **26.11.5** | **357,966** | 通知渠道 7→11 + 元数据驱动 + 密钥打码 + 双语推送 + 投递记录；新增存储页与清理；新增版本检查与一键更新；8 道工程闸门 + CI 打包发布 |
 
-**当前交付**：`output/fn-fail2ban-26.11.7-all.fpk`（366,587 字节，md5 `94b93ff501b6ab88273e3cad383d32aa`）。**下一个版本号 26.11.8**。
-`report/README-26.11.7.md` 是这一版的完整说明；`report/README-26.11.6.md` 是设置页重做的说明，`report/SPEC-26.11.6-设置页重构.md` 是对应的施工图；26.11.5 的说明与施工图在 `report/README-26.11.5.md`、`report/UPGRADE-PLAN-26.11.5.md`。
+**当前交付**：`output/fn-fail2ban-26.11.9-all.fpk`（366,940 字节）。**下一个版本号 26.11.10**。
+`report/README-26.11.9.md` 是当前版本的说明；`report/README-26.11.7.md` 是侧栏左下角那一版；`report/README-26.11.6.md` 是设置页重做的说明，`report/SPEC-26.11.6-设置页重构.md` 是对应的施工图；26.11.5 的说明与施工图在 `report/README-26.11.5.md`、`report/UPGRADE-PLAN-26.11.5.md`。
 
 ## 四、包结构与构建
 
@@ -237,3 +238,57 @@ wizard/uninstall, config/privilege, config/resource     ← 完全相同
 - **收起态的 `.foot-row > button { width:100% }` 会把方形按钮拉扁**。三个面板都是靠
   `.icon-btn` 的 `flex: 0 0 34px` 顶住；本面板早先的 `.sidebar-foot button:not(.icon-btn)`
   选择器比重更高，所以收起态那条规则必须删掉，不能留着「反正被覆盖」。
+
+
+## 九、应用中心与应用信息的三个坑（26.11.9 定型）
+
+### 应用中心显示的版本与作者不在 manifest 里，在 PostgreSQL
+
+`appcenter-cli list` 输出的版本、应用中心卡片上的开发者与主页，读的是
+**PostgreSQL 的 `appcenter` 库 `app` 表**，不是 `/var/apps/<app>/manifest`。二者会不一致：
+
+- 正常路径（应用中心 Web UI 上传 fpk）：由 `trim` 守护进程写入两者，天然一致；
+- 文件级替换（本机唯一能做的方式，因为 `appcenter-cli uninstall` 拒绝卸载第三方应用）：
+  只换了 manifest 与 target 目录，**数据库纹丝不动**，于是界面上一直显示旧版本。
+
+排查命令：
+
+    sudo -u postgres psql -d appcenter -A -F'|' -t \
+      -c "select app_name, name, version, maintainer, distributor from app where app_name='fn-fail2ban';"
+
+同步时**四个字段都要改**，且 `i18n_matadata` 要整份重写：
+
+    update app set version='...', maintainer='Smi1ezZ', distributor='Smi1ezZ',
+                    i18n_matadata='...' where app_name='fn-fail2ban';
+
+### `i18n_matadata` 的键集合必须与其它应用一致
+
+它是 `{"zh-CN": {...}, "en-US": {...}}`，键固定 8 个：
+`Maintainer / Distributor / MaintainerUrl / DistributorUrl / Desc / ChangeLog / DisplayName / BackupGuide`。
+
+- **缺 `DisplayName` → 应用中心列表「名称」列变空白**（踩过）；
+- **多塞一个 `Version` → 那一列反而空**（也踩过，因为列表读的就是这个键）。
+
+参考现成应用的值：
+
+    sudo -u postgres psql -d appcenter -t -c \
+      "select i18n_matadata from app where app_name='fn-qbpanel';"
+
+### 别用 PowerShell here-string 写 SQL / 提交信息
+
+会被写成带 BOM 的 UTF-16，`git log` 出来的提交信息首字符是 ``（踩过一次）。
+用 `write` 工具写纯文本文件，或 `Out-File -Encoding utf8` 后确认首字节是 `E4/B8` 之类而不是 `FF FE`。
+
+### GitHub 发布这条线
+
+- 仓库 **Smi13zZ/fail2ban**，默认分支 main，public。
+- token 从 Windows 凭据管理器读（`CredRead("git:https://github.com")`），只在内存里用。
+- `git push` 把进度写 stderr，PowerShell 会当 `NativeCommandError` 报红，**以输出里的
+  `main -> main` / `[new tag]` 为准**，别看 `$LASTEXITCODE`。
+- CI 只在「标签名 == v + manifest version」时发 Release；临时标签只出 artifact。
+- **发布后必查三件**：下载 Release 资产跑 `inspect_fpk --strict`；用面板真实请求查
+  `/api/update?force=1` 确认能读到 release；模拟旧版本号确认 `has_update=true`。
+- CI 在 Linux 重打包，md5 与本地包**必然不同**（时间戳与压缩参数），不要拿 md5 对比，
+  要比包内版本号与 strict 检查结果。
+- GitHub API 匿名额度 60 次/小时，很容易打满；打满后更新检查退回 atom 源，
+  **那条路径没有资产字节数**，前端必须把 `size=0` 当「未知」而不是「0 B」显示。
