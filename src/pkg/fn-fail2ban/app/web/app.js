@@ -3897,21 +3897,24 @@
   }
 
   // 与设置页同一套标签条：六块一次只展开一块，窄屏横向滚动。
-  // 右端放整页共用的两个动作（测试连接 / 保存设置），它们作用于全部六块。
+  // 「测试连接 / 保存设置」留在标签条右侧、但在灰底之外 —— 灰底是「这是一组标签」
+  // 的视觉边界，把两个动作包进去，会让人以为它们也属于某个分区。
   function fnkWorkbarHtml() {
-    var html = '<div class="workbar fnk-bar" id="fnkWorkbar" role="tablist">';
+    var html = '<div class="fnk-bar-row">' +
+      '<div class="workbar fnk-bar" id="fnkWorkbar" role="tablist">';
     FNK_TABS.forEach(function (id) {
       var on = state.fnkTab === id;
       html += '<button type="button" role="tab" data-fnk-tab="' + esc(id) + '"' +
         ' aria-selected="' + (on ? 'true' : 'false') + '"' +
         (on ? ' class="on"' : '') + '>' + esc(fnkTabLabel(id)) + '</button>';
     });
-    html += '<div class="spacer"></div>' +
+    html += '</div>' +
       '<button type="button" class="btn sm" data-act="fnk-test">' +
       t('common.testConnection') + '</button>' +
       '<button type="button" class="btn sm primary" data-act="fnk-save">' +
-      t('common.saveSettings') + '</button>';
-    return html + '</div>';
+      t('common.saveSettings') + '</button>' +
+      '</div>';
+    return html;
   }
 
   function fnkTabHtml(tab, data, s, detected, f2bState, log, pollInterval) {
