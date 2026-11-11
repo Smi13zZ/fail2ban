@@ -302,7 +302,10 @@ def list_backups(settings: dict | None = None) -> list[dict]:
             "size": stat.st_size,
             "mtime": int(stat.st_mtime),
         })
-    items.sort(key=lambda item: item["mtime"], reverse=True)
+    # 同一秒内生成的多个归档 mtime 相同，只按 mtime 排会让顺序取决于目录遍历顺序，
+    # 于是 prune() 有可能把「刚生成的那一个」当成最旧的删掉。名字里带时间戳，
+    # 拿它当第二排序键，同一秒内的先后也稳定。
+    items.sort(key=lambda item: (item["mtime"], item["name"]), reverse=True)
     return items
 
 
@@ -327,6 +330,191 @@ def delete_backup(name: str) -> bool:
         return True
     except OSError:
         return False
+
+
+# ---------------------------------------------------------------------------
+# 恢复
+# ---------------------------------------------------------------------------
+# 只认下面这几类成员，其余一律忽略。恢复**不**调用 tarfile.extractall()，而是自己
+# 读内容、自己决定写到哪里：归档里的路径永远不会成为写盘目标，符号链接 / 设备文件
+# 也不会被落成设备上的文件。
+
+MESSAGE_NOT_FOUND = "找不到该备份文件"
+MESSAGE_BROKEN = "备份文件不完整或已损坏"
+MESSAGE_FOREIGN = "不是本应用的备份文件"
+
+RESTORE_MANIFEST = "manifest.json"
+RESTORE_PREFS = "prefs.json"
+RESTORE_NOTIFICATIONS = "notifications.json"
+
+
+class BackupNotFound(ValueError):
+    """找不到指定的备份文件。handler 据此回 404，与其它 400 分支区分开。"""
+
+
+def _safe_member_name(member: tarfile.TarInfo) -> str:
+    """取成员归一化后的相对路径；绝对路径或含 .. 段的一律判定为损坏。
+
+    这里刻意不做「跳过可疑成员」：带着越界路径的归档本身就可疑，静默跳过等于
+    把它当成正常归档继续处理，出问题的人也就看不到任何线索。
+    """
+    text = (member.name or "").replace("\\", "/")
+    # tar 里常见 "./x" 前缀，去掉再判，避免把正常打包的归档误判成损坏
+    while text.startswith("./"):
+        text = text[2:]
+    if not text:
+        # "." / "./" 是归档根目录条目，本身没有可写目标，不算越界
+        return ""
+    if text.startswith("/"):
+        raise ValueError(MESSAGE_BROKEN)
+    parts = [part for part in text.split("/") if part not in ("", ".")]
+    if any(part == ".." for part in parts):
+        raise ValueError(MESSAGE_BROKEN)
+    # Windows 盘符形式的绝对路径，换到 Windows 上运行时同样越界
+    if parts and len(parts[0]) == 2 and parts[0][1] == ":" and parts[0][0].isalpha():
+        raise ValueError(MESSAGE_BROKEN)
+    return "/".join(parts)
+
+
+def _classify_member(name: str) -> tuple[str, str]:
+    """把成员归入可恢复的几类，返回 (类型, 附加名)；不恢复的返回 ("", "")。
+
+    jail.d 与 filter.d 都只接受「一层」成员：jail.d/<文件>、
+    filter.d/<名字>.local。过滤器名还要过 NAME_RE，写出去的文件名不可能带路径。
+    """
+    if name in (RESTORE_MANIFEST, RESTORE_PREFS, RESTORE_NOTIFICATIONS):
+        return "config", name
+    parts = name.split("/")
+    if len(parts) == 2 and parts[0] == "jail.d" and parts[1]:
+        return "jail", parts[1]
+    if len(parts) == 2 and parts[0] == "filter.d" and parts[1].endswith(".local"):
+        filter_name = parts[1][:-len(".local")]
+        if jailconf.NAME_RE.match(filter_name):
+            return "filter", filter_name
+    return "", ""
+
+
+def _parse_json_text(text: str):
+    """解析归档里的 JSON；解析不了就是归档损坏，不要当成「内容为空」。"""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(MESSAGE_BROKEN) from exc
+
+
+def _parse_manifest(text: str) -> dict:
+    """校验归档来路：必须是本应用写出的备份。"""
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(MESSAGE_FOREIGN) from exc
+    if not isinstance(data, dict) or data.get("app") != APP_FOLDER_NAME:
+        raise ValueError(MESSAGE_FOREIGN)
+    return data
+
+
+def restore_backup(name: str) -> dict:
+    """把一份归档写回当前配置，返回恢复结果。
+
+    读取与校验全部在内存里做完，只有整份归档都通过（路径、manifest、JSON 结构）才
+    开始写盘 —— 「不是本应用的备份」不应该先改掉一半配置再说不行。
+    重载 fail2ban 放在最后，结果只记录不抛出：配置已经写下去了，这时报错会让用户
+    以为恢复没生效。
+    """
+    path = find_backup(name)
+    if not path:
+        raise BackupNotFound(MESSAGE_NOT_FOUND)
+
+    manifest = None
+    jail_text = None
+    jail_is_managed = False
+    prefs_data = None
+    notifications_data = None
+    filters: list[tuple[str, str]] = []
+
+    try:
+        with tarfile.open(path, "r:*") as archive:
+            for member in archive.getmembers():
+                # 路径校验对全部成员生效（越界就是可疑归档），只有普通文件才会被读
+                normalized = _safe_member_name(member)
+                # 目录、符号链接、设备文件都不是本应用写出的内容，直接忽略
+                if not normalized or not member.isfile():
+                    continue
+                kind, extra = _classify_member(normalized)
+                if not kind:
+                    continue
+                handle = archive.extractfile(member)
+                if handle is None:
+                    raise ValueError(MESSAGE_BROKEN)
+                text = handle.read().decode("utf-8", errors="replace")
+                if kind == "config" and extra == RESTORE_MANIFEST:
+                    manifest = _parse_manifest(text)
+                elif kind == "jail":
+                    # 正常归档里只有一份托管配置。万一有多份，优先取文件名与当前
+                    # 托管文件同名的那一份，其余按出现顺序覆盖，不留下"看运气"的结果。
+                    managed = extra == os.path.basename(jailconf.MANAGED_FILE)
+                    if jail_text is None or managed or not jail_is_managed:
+                        jail_text = text
+                        jail_is_managed = managed
+                elif kind == "filter":
+                    filters.append((extra, text))
+                elif kind == "config" and extra == RESTORE_PREFS:
+                    prefs_data = _parse_json_text(text)
+                elif kind == "config" and extra == RESTORE_NOTIFICATIONS:
+                    data = _parse_json_text(text)
+                    # 结构不对就跳过：宁可少恢复一块，也不要把半份通知配置写进去
+                    if isinstance(data, dict) and isinstance(data.get("channels"), list):
+                        notifications_data = data
+    except (tarfile.TarError, EOFError, OSError) as exc:
+        # 截断、非 tar/gz、崩掉的 gzip 头、读到一半的 I/O 错误都算归档不可用。
+        # 这一段只读不写，所以这里的 OSError 与「写盘失败」不是一回事。
+        raise ValueError(MESSAGE_BROKEN) from exc
+
+    if manifest is None:
+        raise ValueError(MESSAGE_FOREIGN)
+
+    restored = {"jail": False, "filters": 0, "prefs": False, "notifications": False}
+
+    if jail_text is not None or filters:
+        # 只在真要写 fail2ban 配置时才建目录：系统没装 fail2ban 而只恢复界面偏好时，
+        # 不该凭空在 /etc/fail2ban 下造出目录。
+        jailconf.ensure_dirs()
+
+    if jail_text is not None:
+        # 覆盖托管配置前先留底：恢复错了还能从「维护 → 备份文件」里找回上一份。
+        jailconf.backup_file(jailconf.MANAGED_FILE)
+        store.atomic_write(jailconf.MANAGED_FILE, jail_text, 0o644)
+        restored["jail"] = True
+
+    for filter_name, text in filters:
+        _, local_path = jailconf.filter_paths(filter_name)
+        store.atomic_write(local_path, text, 0o644)
+        # 记进自定义过滤器清单，面板的过滤器列表才会把它当成本应用管理的那一份
+        store.record_custom_filter(filter_name, True)
+        restored["filters"] += 1
+
+    if isinstance(prefs_data, dict):
+        store.save_prefs(prefs_data)
+        restored["prefs"] = True
+
+    if notifications_data is not None:
+        store.atomic_write_json(notify.SETTINGS_FILE, notifications_data)
+        restored["notifications"] = True
+
+    reload_state = {"ok": False, "error": None}
+    try:
+        f2b.reload()
+    except Exception as exc:  # noqa: BLE001 - 重载失败只记录，不能让恢复本身失败
+        reload_state = {"ok": False, "error": str(exc)}
+    else:
+        reload_state = {"ok": True, "error": None}
+
+    return {
+        "ok": True,
+        "name": os.path.basename(path),
+        "restored": restored,
+        "reload": reload_state,
+    }
 
 
 def prune(settings: dict | None = None) -> int:
