@@ -1409,7 +1409,55 @@ details.raw pre {
 
 /* 卡片本身当滚动容器：列表贴着圆角内边距滚，不给它单独一层边框 */
 .card.flush { padding: 0; overflow: hidden; }
-.log-foot { margin-top: var(--gap); margin-bottom: 0; }
+
+/* ---------------------------------------------------------- 日志页工具栏 --- */
+
+/* 一行放完：左边按级别筛选，右边依次是关键字、行数、导出、刷新、自动刷新。
+   靠右的这一串里，前两个决定「看哪些」、后三个决定「怎么再取一次」，
+   所以自动刷新紧挨着刷新放，不跟参数混在一起。 */
+/* 关键字框按最长的那条占位符定宽：英文 "Filter by keyword (IP, jail name…)"
+   实测要 235px（文字 213 + 左右内边距 22），220px 会把结尾吃掉半个词。 */
+.toolbar .log-search { flex: 0 1 260px; width: 260px; max-width: 260px; }
+.toolbar .log-lines { flex: 0 0 auto; }
+
+/* 自动刷新：一个标签包住框与文字，整块可点。
+   内联复选框必须显式给宽高 —— .switch 里那条 width:auto 会把
+   appearance:none 的框压成 0 宽，只剩一条 1px 的竖线，看上去像根分隔符。 */
+.log-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  flex: 0 0 auto;
+  font-size: 13px;
+  color: var(--dim);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.log-auto:hover { color: var(--text); }
+/* 框高贴在 16px：与旁边 13px 的文字同高，再大就会比文字高出一截，
+   整行看着像按钮而不是复选框。 */
+.log-auto input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  border-width: 1.5px;
+  border-radius: 4px;
+  border-color: var(--faint);
+}
+.log-auto:hover input[type="checkbox"] { border-color: var(--dim); }
+/* 勾选态整块填满、勾用背景色：小尺寸下描边勾比细线勾清楚得多 */
+.log-auto input[type="checkbox"]:checked {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.log-auto input[type="checkbox"]:checked::after {
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border-width: 0 2px 2px 0;
+  border-color: var(--primary-fg);
+}
 
 /* 遗留的旧写法（.log-box）：设置页说明等地方仍可能有引用，保留兜底 */
 .log-box {
@@ -2768,5 +2816,11 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
   .logline { flex-direction: column; gap: 2px; padding: 8px 12px; }
   .logline .t { min-width: 0; font-size: 11px; }
   .logline .m { word-break: break-word; overflow-wrap: anywhere; }
+
+  /* 日志工具栏在窄屏自动分三行：级别筛选一行、关键字一行、其余控件一行。
+     关键字按 .toolbar 的窄屏规则独占一整行，行数 / 导出 / 刷新 / 自动刷新
+     宽度加起来放得下，就一起留在最后一行。 */
+  .toolbar.log-bar { row-gap: 8px; }
+  .toolbar.log-bar > .log-lines { flex: 0 0 auto; }
 }
 
