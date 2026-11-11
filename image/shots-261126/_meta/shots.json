@@ -1,0 +1,1100 @@
+{
+  "generatedAt": "2026-11-11 20:49:55",
+  "version": "26.11.26",
+  "chromium": "Chrome/156.0.8078.79",
+  "url": "http://127.0.0.1:18752/",
+  "theme": null,
+  "lang": "zh",
+  "viewports": [
+    "desktop",
+    "mobile"
+  ],
+  "discovery": {
+    "views": [
+      "概览",
+      "Jail 管理",
+      "封禁管理",
+      "过滤器",
+      "fn-knock 联动",
+      "日志",
+      "设置"
+    ],
+    "setTabs": [
+      "panel",
+      "appearance",
+      "policy",
+      "notify",
+      "maint",
+      "storage",
+      "update",
+      "guide",
+      "about"
+    ],
+    "fnkTabs": [
+      "mode",
+      "sync",
+      "conn",
+      "status",
+      "list",
+      "log"
+    ]
+  },
+  "stability": null,
+  "expectations": [],
+  "shots": [
+    {
+      "file": "desktop-dashboard.png",
+      "viewport": "desktop",
+      "page": "概览",
+      "problems": [],
+      "stats": {
+        "bytes": 84899,
+        "width": 1440,
+        "height": 900,
+        "sampled": 54000,
+        "uniqueColors": 88,
+        "dominantFrac": 0.8177,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 250.8
+      },
+      "pngH": 900,
+      "waitedMs": 824,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-jails.png",
+      "viewport": "desktop",
+      "page": "Jail 管理",
+      "problems": [],
+      "stats": {
+        "bytes": 46446,
+        "width": 1440,
+        "height": 900,
+        "sampled": 54000,
+        "uniqueColors": 83,
+        "dominantFrac": 0.8304,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 251.6
+      },
+      "pngH": 900,
+      "waitedMs": 676,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-bans.png",
+      "viewport": "desktop",
+      "page": "封禁管理",
+      "problems": [],
+      "stats": {
+        "bytes": 51695,
+        "width": 1440,
+        "height": 900,
+        "sampled": 54000,
+        "uniqueColors": 84,
+        "dominantFrac": 0.8298,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 251.4
+      },
+      "pngH": 900,
+      "waitedMs": 828,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-filters.png",
+      "viewport": "desktop",
+      "page": "过滤器",
+      "problems": [],
+      "stats": {
+        "bytes": 46125,
+        "width": 1440,
+        "height": 900,
+        "sampled": 54000,
+        "uniqueColors": 68,
+        "dominantFrac": 0.8297,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 251.4
+      },
+      "pngH": 900,
+      "waitedMs": 675,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-fnknock.png",
+      "viewport": "desktop",
+      "page": "fn-knock 联动",
+      "problems": [],
+      "stats": {
+        "bytes": 105069,
+        "width": 1440,
+        "height": 900,
+        "sampled": 54000,
+        "uniqueColors": 144,
+        "dominantFrac": 0.7435,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 248.8
+      },
+      "pngH": 900,
+      "waitedMs": 673,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-fnknock-mode.png",
+      "viewport": "desktop",
+      "page": "fnknock · mode",
+      "problems": [],
+      "stats": {
+        "bytes": 105069,
+        "width": 1440,
+        "height": 900,
+        "sampled": 54000,
+        "uniqueColors": 144,
+        "dominantFrac": 0.7435,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 248.8
+      },
+      "pngH": 900,
+      "waitedMs": 672,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-fnknock-sync.png",
+      "viewport": "desktop",
+      "page": "fnknock · sync",
+      "problems": [],
+      "stats": {
+        "bytes": 101443,
+        "width": 1440,
+        "height": 900,
+        "sampled": 54000,
+        "uniqueColors": 167,
+        "dominantFrac": 0.7438,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 248.5
+      },
+      "pngH": 900,
+      "waitedMs": 673,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-fnknock-conn.png",
+      "viewport": "desktop",
+      "page": "fnknock · conn",
+      "problems": [],
+      "stats": {
+        "bytes": 84599,
+        "width": 1440,
+        "height": 900,
+        "sampled": 54000,
+        "uniqueColors": 144,
+        "dominantFrac": 0.747,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 249.1
+      },
+      "pngH": 900,
+      "waitedMs": 675,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-fnknock-status.png",
+      "viewport": "desktop",
+      "page": "fnknock · status",
+      "problems": [],
+      "stats": {
+        "bytes": 66835,
+        "width": 1440,
+        "height": 900,
+        "sampled": 54000,
+        "uniqueColors": 164,
+        "dominantFrac": 0.7593,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 249.7
+      },
+      "pngH": 900,
+      "waitedMs": 673,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-fnknock-list.png",
+      "viewport": "desktop",
+      "page": "fnknock · list",
+      "problems": [],
+      "stats": {
+        "bytes": 59780,
+        "width": 1440,
+        "height": 900,
+        "sampled": 54000,
+        "uniqueColors": 142,
+        "dominantFrac": 0.764,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 249.8
+      },
+      "pngH": 900,
+      "waitedMs": 673,
+      "console": [
+        "error: Failed to load resource: the server responded with a status of 502 (Bad Gateway)"
+      ],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-fnknock-log.png",
+      "viewport": "desktop",
+      "page": "fnknock · log",
+      "problems": [],
+      "stats": {
+        "bytes": 50984,
+        "width": 1440,
+        "height": 900,
+        "sampled": 54000,
+        "uniqueColors": 142,
+        "dominantFrac": 0.7673,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 250.1
+      },
+      "pngH": 900,
+      "waitedMs": 676,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-settings-panel.png",
+      "viewport": "desktop",
+      "page": "设置 · panel",
+      "problems": [],
+      "stats": {
+        "bytes": 50571,
+        "width": 1440,
+        "height": 900,
+        "sampled": 54000,
+        "uniqueColors": 65,
+        "dominantFrac": 0.8002,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 251.1
+      },
+      "pngH": 900,
+      "waitedMs": 673,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-settings-appearance.png",
+      "viewport": "desktop",
+      "page": "设置 · appearance",
+      "problems": [],
+      "stats": {
+        "bytes": 53522,
+        "width": 1440,
+        "height": 900,
+        "sampled": 54000,
+        "uniqueColors": 65,
+        "dominantFrac": 0.7952,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 251.0
+      },
+      "pngH": 900,
+      "waitedMs": 674,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-settings-policy.png",
+      "viewport": "desktop",
+      "page": "设置 · policy",
+      "problems": [],
+      "stats": {
+        "bytes": 122852,
+        "width": 1440,
+        "height": 1456,
+        "sampled": 58320,
+        "uniqueColors": 133,
+        "dominantFrac": 0.859,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 251.7
+      },
+      "pngH": 1456,
+      "waitedMs": 673,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-settings-notify.png",
+      "viewport": "desktop",
+      "page": "设置 · notify",
+      "problems": [],
+      "stats": {
+        "bytes": 108054,
+        "width": 1440,
+        "height": 1254,
+        "sampled": 60240,
+        "uniqueColors": 81,
+        "dominantFrac": 0.8391,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 250.9
+      },
+      "pngH": 1254,
+      "waitedMs": 672,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-settings-maint.png",
+      "viewport": "desktop",
+      "page": "设置 · maint",
+      "problems": [],
+      "stats": {
+        "bytes": 116347,
+        "width": 1440,
+        "height": 1187,
+        "sampled": 57120,
+        "uniqueColors": 79,
+        "dominantFrac": 0.8232,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 250.3
+      },
+      "pngH": 1187,
+      "waitedMs": 672,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-settings-storage.png",
+      "viewport": "desktop",
+      "page": "设置 · storage",
+      "problems": [],
+      "stats": {
+        "bytes": 86779,
+        "width": 1440,
+        "height": 900,
+        "sampled": 54000,
+        "uniqueColors": 80,
+        "dominantFrac": 0.7269,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 249.9
+      },
+      "pngH": 900,
+      "waitedMs": 673,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-settings-update.png",
+      "viewport": "desktop",
+      "page": "设置 · update",
+      "problems": [],
+      "stats": {
+        "bytes": 102618,
+        "width": 1440,
+        "height": 1031,
+        "sampled": 61920,
+        "uniqueColors": 71,
+        "dominantFrac": 0.5983,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 248.5
+      },
+      "pngH": 1031,
+      "waitedMs": 672,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-settings-guide.png",
+      "viewport": "desktop",
+      "page": "设置 · guide",
+      "problems": [],
+      "stats": {
+        "bytes": 114646,
+        "width": 1440,
+        "height": 1527,
+        "sampled": 61200,
+        "uniqueColors": 68,
+        "dominantFrac": 0.863,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 251.7
+      },
+      "pngH": 1527,
+      "waitedMs": 676,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-settings-about.png",
+      "viewport": "desktop",
+      "page": "设置 · about",
+      "problems": [],
+      "stats": {
+        "bytes": 53572,
+        "width": 1440,
+        "height": 900,
+        "sampled": 54000,
+        "uniqueColors": 68,
+        "dominantFrac": 0.8051,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 251.6
+      },
+      "pngH": 900,
+      "waitedMs": 671,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "desktop-logs.png",
+      "viewport": "desktop",
+      "page": "日志",
+      "problems": [],
+      "stats": {
+        "bytes": 124560,
+        "width": 1440,
+        "height": 900,
+        "sampled": 54000,
+        "uniqueColors": 70,
+        "dominantFrac": 0.7831,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 248.4
+      },
+      "pngH": 900,
+      "waitedMs": 823,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-dashboard.png",
+      "viewport": "mobile",
+      "page": "概览",
+      "problems": [],
+      "stats": {
+        "bytes": 153586,
+        "width": 780,
+        "height": 3376,
+        "sampled": 58760,
+        "uniqueColors": 90,
+        "dominantFrac": 0.9402,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 251.2
+      },
+      "pngH": 3376,
+      "waitedMs": 680,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-jails.png",
+      "viewport": "mobile",
+      "page": "Jail 管理",
+      "problems": [],
+      "stats": {
+        "bytes": 50993,
+        "width": 780,
+        "height": 1688,
+        "sampled": 62920,
+        "uniqueColors": 93,
+        "dominantFrac": 0.9343,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 250.3
+      },
+      "pngH": 1688,
+      "waitedMs": 679,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-bans.png",
+      "viewport": "mobile",
+      "page": "封禁管理",
+      "problems": [],
+      "stats": {
+        "bytes": 78844,
+        "width": 780,
+        "height": 1688,
+        "sampled": 62920,
+        "uniqueColors": 108,
+        "dominantFrac": 0.9248,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 249.8
+      },
+      "pngH": 1688,
+      "waitedMs": 823,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-filters.png",
+      "viewport": "mobile",
+      "page": "过滤器",
+      "problems": [],
+      "stats": {
+        "bytes": 69698,
+        "width": 780,
+        "height": 1688,
+        "sampled": 62920,
+        "uniqueColors": 77,
+        "dominantFrac": 0.9041,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 248.9
+      },
+      "pngH": 1688,
+      "waitedMs": 676,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-fnknock.png",
+      "viewport": "mobile",
+      "page": "fn-knock 联动",
+      "problems": [],
+      "stats": {
+        "bytes": 204206,
+        "width": 780,
+        "height": 2278,
+        "sampled": 59280,
+        "uniqueColors": 169,
+        "dominantFrac": 0.7659,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 243.0
+      },
+      "pngH": 2278,
+      "waitedMs": 672,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-fnknock-mode.png",
+      "viewport": "mobile",
+      "page": "fnknock · mode",
+      "problems": [],
+      "stats": {
+        "bytes": 204206,
+        "width": 780,
+        "height": 2278,
+        "sampled": 59280,
+        "uniqueColors": 169,
+        "dominantFrac": 0.7659,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 243.0
+      },
+      "pngH": 2278,
+      "waitedMs": 673,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-fnknock-sync.png",
+      "viewport": "mobile",
+      "page": "fnknock · sync",
+      "problems": [],
+      "stats": {
+        "bytes": 187261,
+        "width": 780,
+        "height": 2234,
+        "sampled": 58240,
+        "uniqueColors": 204,
+        "dominantFrac": 0.7733,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 242.6
+      },
+      "pngH": 2234,
+      "waitedMs": 673,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-fnknock-conn.png",
+      "viewport": "mobile",
+      "page": "fnknock · conn",
+      "problems": [],
+      "stats": {
+        "bytes": 153240,
+        "width": 780,
+        "height": 2008,
+        "sampled": 58240,
+        "uniqueColors": 165,
+        "dominantFrac": 0.7803,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 244.3
+      },
+      "pngH": 2008,
+      "waitedMs": 677,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-fnknock-status.png",
+      "viewport": "mobile",
+      "page": "fnknock · status",
+      "problems": [],
+      "stats": {
+        "bytes": 111801,
+        "width": 780,
+        "height": 1688,
+        "sampled": 62920,
+        "uniqueColors": 210,
+        "dominantFrac": 0.7443,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 242.9
+      },
+      "pngH": 1688,
+      "waitedMs": 674,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-fnknock-list.png",
+      "viewport": "mobile",
+      "page": "fnknock · list",
+      "problems": [],
+      "stats": {
+        "bytes": 96265,
+        "width": 780,
+        "height": 1688,
+        "sampled": 62920,
+        "uniqueColors": 171,
+        "dominantFrac": 0.7659,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 243.7
+      },
+      "pngH": 1688,
+      "waitedMs": 673,
+      "console": [
+        "error: Failed to load resource: the server responded with a status of 502 (Bad Gateway)"
+      ],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-fnknock-log.png",
+      "viewport": "mobile",
+      "page": "fnknock · log",
+      "problems": [],
+      "stats": {
+        "bytes": 77032,
+        "width": 780,
+        "height": 1688,
+        "sampled": 62920,
+        "uniqueColors": 171,
+        "dominantFrac": 0.7743,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 244.5
+      },
+      "pngH": 1688,
+      "waitedMs": 675,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-settings-panel.png",
+      "viewport": "mobile",
+      "page": "设置 · panel",
+      "problems": [],
+      "stats": {
+        "bytes": 74033,
+        "width": 780,
+        "height": 1688,
+        "sampled": 62920,
+        "uniqueColors": 76,
+        "dominantFrac": 0.8659,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 242.8
+      },
+      "pngH": 1688,
+      "waitedMs": 675,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-settings-appearance.png",
+      "viewport": "mobile",
+      "page": "设置 · appearance",
+      "problems": [],
+      "stats": {
+        "bytes": 80792,
+        "width": 780,
+        "height": 1688,
+        "sampled": 62920,
+        "uniqueColors": 78,
+        "dominantFrac": 0.8623,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 243.2
+      },
+      "pngH": 1688,
+      "waitedMs": 678,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-settings-policy.png",
+      "viewport": "mobile",
+      "page": "设置 · policy",
+      "problems": [],
+      "stats": {
+        "bytes": 232163,
+        "width": 780,
+        "height": 3194,
+        "sampled": 59540,
+        "uniqueColors": 173,
+        "dominantFrac": 0.8832,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 245.8
+      },
+      "pngH": 3194,
+      "waitedMs": 675,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-settings-notify.png",
+      "viewport": "mobile",
+      "page": "设置 · notify",
+      "problems": [],
+      "stats": {
+        "bytes": 196444,
+        "width": 780,
+        "height": 3086,
+        "sampled": 57460,
+        "uniqueColors": 91,
+        "dominantFrac": 0.8818,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 247.6
+      },
+      "pngH": 3086,
+      "waitedMs": 675,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-settings-maint.png",
+      "viewport": "mobile",
+      "page": "设置 · maint",
+      "problems": [],
+      "stats": {
+        "bytes": 213861,
+        "width": 780,
+        "height": 3044,
+        "sampled": 61100,
+        "uniqueColors": 98,
+        "dominantFrac": 0.8976,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 247.6
+      },
+      "pngH": 3044,
+      "waitedMs": 674,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-settings-storage.png",
+      "viewport": "mobile",
+      "page": "设置 · storage",
+      "problems": [],
+      "stats": {
+        "bytes": 146377,
+        "width": 780,
+        "height": 2086,
+        "sampled": 60320,
+        "uniqueColors": 95,
+        "dominantFrac": 0.823,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 248.5
+      },
+      "pngH": 2086,
+      "waitedMs": 678,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-settings-update.png",
+      "viewport": "mobile",
+      "page": "设置 · update",
+      "problems": [],
+      "stats": {
+        "bytes": 174001,
+        "width": 780,
+        "height": 2420,
+        "sampled": 57200,
+        "uniqueColors": 73,
+        "dominantFrac": 0.7066,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 246.6
+      },
+      "pngH": 2420,
+      "waitedMs": 673,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-settings-guide.png",
+      "viewport": "mobile",
+      "page": "设置 · guide",
+      "problems": [],
+      "stats": {
+        "bytes": 212833,
+        "width": 780,
+        "height": 3252,
+        "sampled": 60580,
+        "uniqueColors": 71,
+        "dominantFrac": 0.8998,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 249.2
+      },
+      "pngH": 3252,
+      "waitedMs": 675,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-settings-about.png",
+      "viewport": "mobile",
+      "page": "设置 · about",
+      "problems": [],
+      "stats": {
+        "bytes": 82877,
+        "width": 780,
+        "height": 1688,
+        "sampled": 62920,
+        "uniqueColors": 76,
+        "dominantFrac": 0.8965,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 250.8
+      },
+      "pngH": 1688,
+      "waitedMs": 673,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    },
+    {
+      "file": "mobile-logs.png",
+      "viewport": "mobile",
+      "page": "日志",
+      "problems": [],
+      "stats": {
+        "bytes": 138097,
+        "width": 780,
+        "height": 1794,
+        "sampled": 58500,
+        "uniqueColors": 78,
+        "dominantFrac": 0.8991,
+        "dominantRGB": [
+          252,
+          252,
+          252
+        ],
+        "meanLuma": 248.8
+      },
+      "pngH": 1794,
+      "waitedMs": 826,
+      "console": [],
+      "overflowX": false,
+      "truncated": false
+    }
+  ]
+}

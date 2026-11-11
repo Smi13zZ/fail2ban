@@ -756,7 +756,7 @@
       case 'filters': renderFilters(); break;
       case 'fnknock': renderFnknock(); break;
       case 'settings': renderSettings(); break;
-      case 'logs': renderLogs(); break;
+      case 'logs': renderLogs(true); break;
       default: renderDashboard();
     }
   }
@@ -3741,13 +3741,17 @@
   // 单行日志的摘要长度上限：超出部分收起，避免一条记录占满整屏
   var LOG_SUMMARY_MAX = 260;
 
-  // 只命中当前级别筛选的行；「全部」不做过滤
+  // 只命中当前级别筛选的行；「全部」不做过滤。
+  // 返回时倒序：日志文件是从旧到新追加的，界面把最新的放在最上面，
+  // 一眼就能看到刚刚发生了什么，不用滚到底。
   function visibleLogLines() {
     var data = state.logs;
     if (!data || !data.lines) return [];
     var level = state.logOpts.level;
-    if (!level || level === 'all') return data.lines;
-    return data.lines.filter(function (line) { return logLevelOf(line) === level; });
+    var picked = (!level || level === 'all')
+      ? data.lines.slice()
+      : data.lines.filter(function (line) { return logLevelOf(line) === level; });
+    return picked.reverse();
   }
 
   // 级别 → 行样式类：与列表配色一一对应（封禁红、解封绿、失败琥珀）
@@ -3776,14 +3780,17 @@
       '</span></div>';
   }
 
-  function renderLogs() {
+  // resetScroll：筛选条件变了就回到顶部 —— 那是一次全新的查询，
+  // 沿用上一次的滚动位置会落在毫不相干的地方。自动刷新不走这条路。
+  function renderLogs(resetScroll) {
     var host = $('#view');
     var data = state.logs;
     var rows = visibleLogLines();
 
-    // 级别用分段标签、右侧是自动刷新与刷新按钮 —— 一行放完筛选与动作，
-    // 不再把行数下拉、关键字框、刷新、开关全挤成一排。
-    var html = '<div class="toolbar">' +
+    // 工具栏只有一条：左边按级别筛选，右边依次是关键字、行数、导出、刷新、自动刷新。
+    // 这四项原先挂在页面底部，翻日志时视线要来回跳；越靠右越接近「重新取一次」，
+    // 所以刷新与自动刷新挨在一起，参数类的关键字与行数排在它们左边。
+    var html = '<div class="toolbar log-bar">' +
       '<div class="seg" id="logLevelSeg">' +
       LOG_LEVELS.map(function (id) {
         return '<button type="button" data-act="log-level" data-level="' + esc(id) + '"' +
@@ -3791,11 +3798,25 @@
           esc(logLevelLabel(id)) + '</button>';
       }).join('') +
       '</div><div class="spacer"></div>' +
-      '<label class="switch"><input type="checkbox" id="logAuto"' +
-      (state.logOpts.auto ? ' checked' : '') + '><span>' +
-      esc(t('log.autoRefreshShort')) + '</span></label>' +
-      ("<button class=\"btn sm\" data-act=\"logs-refresh\">" + t('common.refresh') + "</button>") +
+      '<input type="text" id="logKeyword" class="log-search" placeholder="' +
+        esc(t('log.keywordPlaceholder')) + '" value="' + esc(state.logOpts.keyword) + '">' +
+      '<select id="logLines" class="log-lines">' +
+      [100, 200, 400, 800, 2000].map(function (n) {
+        return option(n, t('log.lineCount', { n: n }), state.logOpts.lines);
+      }).join('') + '</select>' +
+      '<button class="btn sm" data-act="logs-export">' + t('common.export') + '</button>' +
+      '<button class="btn sm" data-act="logs-refresh">' + t('common.refresh') + '</button>' +
+      '<label class="log-auto"><input type="checkbox" id="logAuto"' +
+        (state.logOpts.auto ? ' checked' : '') + '><span>' +
+        esc(t('log.autoRefreshShort')) + '</span></label>' +
       '</div>';
+
+    // 重绘前记住滚动位置：自动刷新每 5 秒整块重绘一次，归零会让正在读的位置跳走。
+    // 新的行出现在最上面，所以除了 scrollTop 还要记住总高度 —— 顶进来几行，
+    // 原来的内容就往下挪多少，按差值补回去才停在原处。
+    var prevBox = $('.card.flush', host);
+    var keepTop = (prevBox && !resetScroll) ? prevBox.scrollTop : 0;
+    var keepHeight = (prevBox && !resetScroll) ? prevBox.scrollHeight : 0;
 
     html += '<div class="card flush" style="max-height:72vh;overflow:auto">';
     if (!data) {
@@ -3811,21 +3832,14 @@
     }
     html += '</div>';
 
-    // 关键字与行数收到页面底部的次要工具条：它们是偶尔调一次的参数，
-    // 放在顶部会把最常用的级别筛选挤下去。
-    html += '<div class="toolbar log-foot">' +
-      ("<input type=\"text\" id=\"logKeyword\" placeholder=\"" + t('log.keywordPlaceholder') + "\" value=\"") + esc(state.logOpts.keyword) + '">' +
-      '<select id="logLines" style="width:auto">' +
-      [100, 200, 400, 800, 2000].map(function (n) {
-        return option(n, t('log.lineCount', { n: n }), state.logOpts.lines);
-      }).join('') + '</select>' +
-      '<div class="spacer"></div>' +
-      ("<button class=\"btn sm\" data-act=\"logs-export\">" + t('common.export') + "</button>") +
-      '</div>';
-
     host.innerHTML = html;
     var box = $('.card.flush', host);
-    if (box) box.scrollTop = box.scrollHeight;
+    if (box) {
+      // 本来就停在最上面：跟着最新的一行走，不往回缩
+      if (keepTop <= 4) box.scrollTop = 0;
+      // 停在中间：新行顶进来多少就往下让多少，正在读的那几行留在原地
+      else if (keepHeight) box.scrollTop = keepTop + (box.scrollHeight - keepHeight);
+    }
 
     if (state.logOpts.auto && !logTimer) {
       logTimer = setInterval(function () {
@@ -4941,7 +4955,7 @@
     if (act === 'log-level') {
       // 纯前端筛选：日志已经全部拉下来了，切级别不再发请求
       state.logOpts.level = trigger.dataset.level || 'all';
-      renderLogs();
+      renderLogs(true);
       return;
     }
 
@@ -5201,7 +5215,7 @@
         state.logOpts.keyword = text;
         loadLogs().then(function () {
           if (state.view !== 'logs') return;
-          renderLogs();
+          renderLogs(true);
           // 整页重绘会让输入框失焦，光标也回到开头 —— 重新聚焦并摆到末尾
           var box = $('#logKeyword');
           if (box) {
