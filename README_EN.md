@@ -94,7 +94,7 @@ The host needs fail2ban. The install wizard offers to install it through `apt`
 
 ## Version
 
-Current version 26.11.24. See [CHANGELOG](CHANGELOG.md) for the change history and
+Current version 26.11.25. See [CHANGELOG](CHANGELOG.md) for the change history and
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the build and verification workflow.
 
 Installers are on the [Releases](https://github.com/Smi13zZ/fail2ban/releases/latest)
