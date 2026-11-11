@@ -83,5 +83,9 @@ Server 酱、PushPlus、WxPusher、Telegram、Slack、自定义 Webhook。
 
 ## 版本
 
-当前版本 26.11.18，改动记录见 [CHANGELOG](CHANGELOG.md)，构建与验证流程见
+当前版本 26.11.24，改动记录见 [CHANGELOG](CHANGELOG.md)，构建与验证流程见
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
+
+安装包在 [Releases](https://github.com/Smi13zZ/fail2ban/releases/latest) 里下载：
+选 `fn-fail2ban-<版本>-all.fpk`，在飞牛 fnOS 的应用中心手动安装；已装旧版本的
+直接在应用中心点升级即可，配置与数据保留。
