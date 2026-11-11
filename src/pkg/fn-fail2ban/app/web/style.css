@@ -2268,24 +2268,29 @@ details.raw pre {
   background: var(--danger);
 }
 
-/* fn-knock 标签条右端带两个页面动作：标签条本身是 --muted 底，
-   按钮要跟着这个底色走，不能沿用卡片上的白底描边（会比底更亮）。 */
+/* fn-knock：标签条 + 右端两个页面动作。
+   灰底只包标签本身，动作放在灰底之外 —— 灰底是「这是一组标签」的视觉边界，
+   把按钮一起包进去会让人以为「测试连接 / 保存设置」属于某个分区，
+   而且灰底被拉到整行宽之后，右侧一大片空灰看着像是少了一块内容。 */
+.fnk-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--gap);
+}
+/* 行内自己管底边距，标签条不再重复加一份 */
+.fnk-bar-row > .workbar { flex: 0 1 auto; margin-bottom: 0; }
+.fnk-bar-row > .btn.sm { flex: 0 0 auto; }
+/* 动作按钮靠右：标签条有多宽就占多宽，剩下的空间推到按钮左边 */
+.fnk-bar-row > .btn.sm:first-of-type { margin-left: auto; }
 .fnk-bar { gap: 4px; }
-.fnk-bar .spacer { flex: 1 1 auto; margin-left: 2px; }
-.fnk-bar .btn.sm {
-  height: 28px;
-  flex: 0 0 auto;
-  border-color: color-mix(in srgb, var(--text) 16%, transparent);
-  background: var(--card);
-}
-.fnk-bar .btn.sm.primary {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--primary-fg);
-}
 @media (max-width: 720px) {
-  /* 窄屏下标签条横向滚动，动作按钮跟着滚到最右即可，不另起一行 */
-  .fnk-bar .btn.sm { padding: 0 9px; font-size: 12.5px; }
+  /* 窄屏：标签条独占一行、横向滚动，两个动作换到第二行 */
+  .fnk-bar-row { flex-wrap: wrap; }
+  .fnk-bar-row > .workbar { flex: 1 1 100%; }
+  .fnk-bar-row > .btn.sm { flex: 1 1 0; }
+  .fnk-bar-row > .btn.sm:first-of-type { margin-left: 0; }
+  .fnk-bar-row > .btn.sm { padding: 0 9px; font-size: 12.5px; }
 }
 
 /* ------------------------------------------------- 卡片头 / 卡片脚 --- */
