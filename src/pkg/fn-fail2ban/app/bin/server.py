@@ -38,7 +38,7 @@ import store  # noqa: E402
 import update  # noqa: E402
 
 APP_NAME = os.environ.get("TRIM_APPNAME") or "fn-fail2ban"
-APP_VERSION = "26.11.19"
+APP_VERSION = "26.11.24"
 PORT = int(os.environ.get("TRIM_SERVICE_PORT") or os.environ.get("F2B_PORT") or 18752)
 BIND_ADDR = os.environ.get("F2B_BIND") or "0.0.0.0"
 READY_FILE = os.environ.get("F2B_READYFILE") or os.path.join(store.VAR_DIR, "server.ready")
@@ -1206,6 +1206,21 @@ def h_backup_delete(handler, params, body):
     return {"ok": True, "backups": backup.list_backups()}
 
 
+def h_backup_restore(handler, params, body):
+    name = str(body.get("name") or "")
+    try:
+        result = backup.restore_backup(name)
+    except backup.BackupNotFound as exc:
+        raise ApiError(str(exc), 404) from exc
+    except ValueError as exc:
+        # 归档本身不可用：路径越界、manifest 不是本应用、JSON 解析失败都在这里
+        raise ApiError(str(exc) or "备份文件不完整或已损坏", 400) from exc
+    except OSError as exc:
+        raise ApiError(f"恢复失败：{exc}", 500) from exc
+    result["backups"] = backup.list_backups()
+    return result
+
+
 def h_backup_download(handler, params, body):
     name = str(params.get("name") or "")
     path = backup.find_backup(name)
@@ -1371,6 +1386,7 @@ ROUTES = [
     ("PUT", re.compile(r"^/api/backup$"), h_backup_put, False),
     ("POST", re.compile(r"^/api/backup/run$"), h_backup_run, False),
     ("POST", re.compile(r"^/api/backup/delete$"), h_backup_delete, False),
+    ("POST", re.compile(r"^/api/backup/restore$"), h_backup_restore, False),
     ("GET", re.compile(r"^/api/backup/download$"), h_backup_download, False),
 
     ("GET", re.compile(r"^/api/fnknock$"), h_fnknock_get, False),

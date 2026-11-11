@@ -97,7 +97,8 @@
     // 概览页「防护中的 Jail」表排序：name | count | total | failed
     dashSort: { key: 'name', dir: 'asc' },
     logs: null,
-    logOpts: { lines: 400, keyword: '', auto: false },
+    // level 是日志页的分段筛选（all | ban | unban | found | warn | error），纯前端过滤
+    logOpts: { lines: 400, keyword: '', auto: false, level: 'all' },
     jailOpts: { scope: 'enabled', search: '', sort: { key: 'name', dir: 'asc' } },
     fnknock: null,
     fnkBlacklist: null,
@@ -140,7 +141,7 @@
   // 设置页的分区。id 是路由键，文案在 set.tab.<id> 下。
   // 「说明」放最后第二位：它列的是文件位置与端口，属于查阅性质的参考页，
   // 不适合夹在会改配置的分区中间。
-  var SET_TABS = ['panel', 'appearance', 'policy', 'notify', 'backup', 'storage',
+  var SET_TABS = ['panel', 'appearance', 'policy', 'notify', 'maint', 'storage',
     'update', 'guide', 'about'];
   var SET_TAB_KEY = 'set.tab.';
 
@@ -197,6 +198,10 @@
   // 后面跟引擎版本，与概览里显示的同源
   var GLOBE_ICON = SVG_OPEN + '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/>' +
     '<path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z"/></svg>';
+
+  // 铃铛：通知空态与渠道行的图标（内联 SVG，不额外引资源）
+  var BELL_ICON = SVG_OPEN + '<path d="M6 8a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/>' +
+    '<path d="M10.3 20a2 2 0 0 0 3.4 0"/></svg>';
 
   // 折叠按钮：方框 + 左侧竖线 + 方向箭头（收起时箭头朝左，展开时朝右）
   var COLLAPSE_ICONS = {
@@ -427,15 +432,12 @@
     return localStorage.getItem('f2b-theme') || 'auto';
   }
 
-  // 侧栏底部版本行：面板版本来自 /api/meta 的 app.version（回落到 /api/session），
-  // 后面跟系统里实际装的 fail2ban 版本 —— 面板版本不等于引擎版本，
-  // 排查问题时需要同时看到两者。
-  function setVersionLine(version, engineVersion) {
+  // 侧栏底部版本行只显示面板自身版本。引擎版本在「设置 · 关于」里，
+  // 这里再跟一遍会把 25 个等宽字符挤进 216px 的侧栏，尾部一律截断。
+  function setVersionLine(version) {
     var text = $('#verText');
     if (!text || !version) return;
-    var line = 'v' + version;
-    if (engineVersion) line += ' · Fail2ban ' + engineVersion;
-    text.textContent = line;
+    text.textContent = 'v' + version;
     var node = $('#verLine');
     if (node) node.title = 'Fail2ban v' + version;
   }
@@ -678,14 +680,12 @@
       // 回到上一个页面，却只是在设置页的分区之间来回跳。
       history.replaceState(null, '', '#' + viewHash('settings', id));
     } catch (e) { location.hash = viewHash('settings', id); }
-    paintPageTitle();
     // 先画标签条与占位，再去拉这个分区的数据：切标签是瞬时的，
     // 数据没到也不该整页空着。
     renderSettings();
     var tasks = loadSettingsTab(id);
     if (!tasks.length) return;
     Promise.all(tasks).then(function () {
-      // 期间用户可能又切走了，只重绘还在当前分区的情况
       if (state.view === 'settings' && state.setTab === id) renderSettings();
     }).catch(function (err) {
       if (state.view === 'settings' && state.setTab === id) toast(localizeErr(err), 'err');
@@ -726,12 +726,9 @@
   function paintPageTitle() {
     var title = $('#pageTitle');
     if (!title) return;
-    var text = VIEW_TITLES[state.view] || 'Fail2ban';
-    // 设置页的标题带上分区名，顶栏才能看出当前在哪一块
-    if (state.view === 'settings' && SET_TABS.indexOf(state.setTab) >= 0) {
-      text += ' · ' + setTabLabel(state.setTab);
-    }
-    title.textContent = text;
+    // 顶栏只写视图名。设置页不再拼「· 分区」后缀：当前在哪个分区
+    // 由标签条自己高亮显示，标题里再写一遍是重复的。
+    title.textContent = VIEW_TITLES[state.view] || 'Fail2ban';
   }
 
   function setView(view, tab) {
@@ -923,35 +920,7 @@
     if (!data.jails.length) {
       html += t('dash.noJailsInline');
     } else {
-      html += '<div class="table-wrap"><table class="fixed"><thead><tr>' +
-        '<th class="c-jail">Jail</th>' +
-        ("<th class=\"c-status\">" + t('notify.colStatus') + "</th>") +
-        ("<th class=\"c-count num\">" + t('dash.colBans') + "</th>") +
-        ("<th class=\"c-count num\">" + t('dash.colTotal') + "</th>") +
-        ("<th class=\"c-count num\">" + t('dash.colFailed') + "</th>") +
-        ("<th class=\"c-bantime\">" + t('dash.colBanTime') + "</th>") +
-        ("<th class=\"c-logpath\">" + t('dash.colLogFile') + "</th>") +
-        '<th class="c-acts"></th>' +
-        '</tr></thead><tbody>';
-      dashJails.forEach(function (jail) {
-        var st = jail.status || {};
-        html += '<tr>' +
-          '<td class="c-jail"><div class="jail-cell"><strong>' + esc(jail.name) + '</strong>' +
-          '<span class="jail-badges">' + badges(jail) + '</span></div></td>' +
-          '<td class="c-status">' + (jail.active
-            ? t('dash.badgeRunning')
-            : t('dash.badgeStopped')) + '</td>' +
-          '<td class="c-count num">' + (st.currentlyBanned || 0) + '</td>' +
-          '<td class="c-count num">' + (st.totalBanned || 0) + '</td>' +
-          '<td class="c-count num">' + (st.totalFailed || 0) + '</td>' +
-          '<td class="c-bantime mono">' + esc(jail.values.bantime || '—') + '</td>' +
-          '<td class="c-logpath mono">' + esc(shorten(jail.values.logpath || '—')) + '</td>' +
-          '<td class="c-acts"><div class="cell-actions">' +
-          '<button class="btn sm" data-act="jail-edit" data-name="' + esc(jail.name) + ("\">" + t('common.config') + "</button>") +
-          '<button class="btn sm" data-act="view-bans" data-name="' + esc(jail.name) + ("\">" + t('common.ban') + "</button>") +
-          '</div></td></tr>';
-      });
-      html += '</tbody></table></div>';
+      html += jailTableHtml(dashJails, 'bans');
     }
     html += '</div>';
 
@@ -1033,14 +1002,68 @@
     return text.length > 46 ? '…' + text.slice(-45) : text;
   }
 
-  function badges(jail) {
-    var out = '';
-    if (jail.managed) out += t('jail.badgeManaged');
-    else if (jail.preset) out += t('jail.badgePreset');
-    else out += t('jail.badgeCustom');
-    if (jail.enabled) out += t('jail.badgeEnabled');
-    else out += t('jail.badgeDisabled');
-    return out;
+  /* 三种状态各一个徽章，各自占一列（表格里并列显示，不再叠在名称下面）。
+     徽章文案本身带 <span class="badge …">，不在这里拼容器。 */
+  function managedBadge(jail) {
+    if (jail.managed) return t('jail.badgeManaged');
+    if (jail.preset) return t('jail.badgePreset');
+    return t('jail.badgeCustom');
+  }
+
+  function enabledBadge(jail) {
+    return jail.enabled ? t('jail.badgeEnabled') : t('jail.badgeDisabled');
+  }
+
+  /* 运行状态只表达「引擎此刻是否在跑这个 Jail」，与「是否启用」是两回事：
+     停掉一个已启用的 Jail 之后它仍然启用，只是没在运行。 */
+  function runStateBadge(jail) {
+    if (jail.active) return t('dash.badgeRunning');
+    return t('jail.badgeNotRunning');
+  }
+
+  // 概览与 Jail 管理两个页面列的是同一批字段，共用一套表头和行模板：
+  // 各写一份的结果就是「概览里徽章挤在名称下面、Jail 管理里拆成三列」这种不一致。
+  // actions 决定右侧按钮：Jail 管理给「配置 / 日志 / 启动(停止)」，
+  // 概览给「配置 / 封禁」—— 一键跳到封禁页并带上该 Jail。
+  function jailTableHtml(list, actions) {
+    var html = '<div class="table-wrap"><table class="fixed jail-table"><thead><tr>' +
+      '<th class="c-jail">' + t('jail.colName') + '</th>' +
+      ("<th class=\"c-managed hide-sm\">" + t('jail.colManaged') + "</th>") +
+      ("<th class=\"c-enabled\">" + t('jail.colEnabled') + "</th>") +
+      ("<th class=\"c-runstate\">" + t('jail.colRunState') + "</th>") +
+      ('<th class="c-count hide-md">maxretry</th>' +
+       '<th class="c-count hide-md">findtime</th>' +
+       '<th class="c-count hide-md">bantime</th>' +
+       "<th class=\"c-sum\">" + t('dash.colBans') + "</th>" +
+       "<th class=\"c-sum\">" + t('dash.colTotal') + "</th>" +
+       "<th class=\"c-sum\">" + t('dash.colFailed') + "</th>" +
+       "<th class=\"c-acts\">" + t('common.actions') + "</th>") +
+      '</tr></thead><tbody>';
+    list.forEach(function (jail) {
+      var jst = jail.status || {};
+      var acts = actions === 'bans'
+        ? '<button class="btn sm" data-act="jail-edit" data-name="' + esc(jail.name) + ("\">" + t('common.config') + "</button>") +
+          '<button class="btn sm" data-act="view-bans" data-name="' + esc(jail.name) + ("\">" + t('common.ban') + "</button>")
+        : '<button class="btn sm" data-act="jail-edit" data-name="' + esc(jail.name) + ("\">" + t('common.config') + "</button>") +
+          '<button class="btn sm" data-act="jail-log" data-name="' + esc(jail.name) + ("\">" + t('common.logs') + "</button>") +
+          (jail.active
+            ? '<button class="btn sm" data-act="jail-stop" data-name="' + esc(jail.name) + ("\">" + t('common.stop') + "</button>")
+            : '<button class="btn sm" data-act="jail-start" data-name="' + esc(jail.name) + ("\">" + t('common.start') + "</button>"));
+      html += '<tr>' +
+        '<td class="c-jail"><strong>' + esc(jail.name) + '</strong></td>' +
+        '<td class="c-managed hide-sm">' + managedBadge(jail) + '</td>' +
+        '<td class="c-enabled">' + enabledBadge(jail) + '</td>' +
+        '<td class="c-runstate">' + runStateBadge(jail) + '</td>' +
+        '<td class="c-count hide-md">' + esc(jail.values.maxretry || '—') + '</td>' +
+        '<td class="c-count hide-md mono">' + esc(jail.values.findtime || '—') + '</td>' +
+        '<td class="c-count hide-md mono">' + esc(jail.values.bantime || '—') + '</td>' +
+        // 未运行的 Jail 后端不给 status，整列显示「—」而不是假 0
+        '<td class="c-sum">' + (jail.status ? (jst.currentlyBanned || 0) : '—') + '</td>' +
+        '<td class="c-sum">' + (jail.status ? (jst.totalBanned || 0) : '—') + '</td>' +
+        '<td class="c-sum">' + (jail.status ? (jst.totalFailed || 0) : '—') + '</td>' +
+        '<td class="c-acts"><div class="cell-actions">' + acts + '</div></td></tr>';
+    });
+    return html + '</tbody></table></div>';
   }
 
   /* --------------------------------------------------------- Jail 管理 */
@@ -1062,9 +1085,9 @@
     });
     list = sortJailList(list, sort);
 
-    var html = t('jail.titleInline') +
-      ("<span class=\"hint\">" + t('dash.writesToPrefix') + " <span class=\"mono\">") + esc((state.meta && state.meta.managedFile) || '') + '</span></span>' +
-      '<div class="spacer"></div>' +
+    // 页面标题由顶栏统一呈现；写入位置这类路径说明归「设置 · 说明」，
+    // 不再在每页标题行重复一遍（正式界面里看不出该不该改、改了有没有用）。
+    var html = '<div class="view-head"><div class="spacer"></div>' +
       ("<button class=\"btn primary\" data-act=\"jail-new\">+ " + t('jail.newTitle') + "</button></div>");
 
     html += '<div class="toolbar">' +
@@ -1086,47 +1109,13 @@
         ], sort) + "</h3>");
 
     if (!list.length) {
-      html += t('jail.emptyFilteredInline');
+      html += t('jail.emptyFilteredInline') + '</div>';
     } else {
-      html += '<div class="table-wrap"><table class="fixed jail-table"><thead><tr>' +
-        '<th class="c-jail">' + t('jail.colName') + '</th>' +
-        ("<th class=\"c-status\">" + t('notify.colStatus') + "</th>") +
-        ("<th class=\"c-filter\">" + t('nav.filters') + "</th>") +
-        ("<th class=\"c-logpath\">" + t('dash.colLogFile') + "</th>") +
-        ('<th class="c-count num">maxretry</th>') +
-        ('<th class="c-count">findtime</th>') +
-        ('<th class="c-count">bantime</th>') +
-        ("<th class=\"c-count num\">" + t('dash.colBans') + "</th>") +
-        ("<th class=\"c-count num\">" + t('dash.colTotal') + "</th>") +
-        ("<th class=\"c-count num\">" + t('dash.colFailed') + "</th>") +
-        ("<th class=\"c-acts\">" + t('common.actions') + "</th>") +
-        '</tr></thead><tbody>';
-      list.forEach(function (jail) {
-        var jst = jail.status || {};
-        html += '<tr>' +
-          '<td class="c-jail"><div class="jail-cell"><strong>' + esc(jail.name) + '</strong>' +
-          '<span class="jail-badges">' + badges(jail) + '</span></div></td>' +
-          '<td class="c-status">' + (jail.active
-            ? t('dash.badgeRunning')
-            : t('jail.badgeNotRunning')) + '</td>' +
-          '<td class="c-filter mono">' + esc(jail.values.filter || jail.name) + '</td>' +
-          '<td class="c-logpath mono">' + esc(shorten(jail.values.logpath || '—')) + '</td>' +
-          '<td class="c-count num">' + esc(jail.values.maxretry || '—') + '</td>' +
-          '<td class="c-count mono">' + esc(jail.values.findtime || '—') + '</td>' +
-          '<td class="c-count mono">' + esc(jail.values.bantime || '—') + '</td>' +
-          // 未运行的 Jail 后端不给 status，整列显示「—」而不是假 0
-          '<td class="c-count num">' + (jail.status ? (jst.currentlyBanned || 0) : '—') + '</td>' +
-          '<td class="c-count num">' + (jail.status ? (jst.totalBanned || 0) : '—') + '</td>' +
-          '<td class="c-count num">' + (jail.status ? (jst.totalFailed || 0) : '—') + '</td>' +
-          '<td class="c-acts"><div class="cell-actions">' +
-          '<button class="btn sm" data-act="jail-edit" data-name="' + esc(jail.name) + ("\">" + t('common.config') + "</button>") +
-          '<button class="btn sm" data-act="jail-log" data-name="' + esc(jail.name) + ("\">" + t('common.logs') + "</button>") +
-          (jail.active
-            ? '<button class="btn sm" data-act="jail-stop" data-name="' + esc(jail.name) + ("\">" + t('common.stop') + "</button>")
-            : '<button class="btn sm" data-act="jail-start" data-name="' + esc(jail.name) + ("\">" + t('common.start') + "</button>")) +
-          '</div></td></tr>';
-      });
-      html += '</tbody></table></div></div>';
+      // 过滤器与日志文件不在这里列：两者都是 fail2ban 的变量引用
+      // （%(__name__)s[mode=%(mode)s] 这种），一行就要两百多像素，
+      // 挤进来会把这个十一列的表撑出卡片、后面几列跟着被截断。
+      // 它们仍然可以在「配置」抽屉里看到和修改，搜索也照样能命中。
+      html += jailTableHtml(list, 'manage') + '</div>';
     }
     host.innerHTML = html;
   }
@@ -1603,27 +1592,21 @@
     // 切到具体 Jail 时汇总视图的勾选不再有意义
     if (!all) state.bans.selected = {};
 
-    html += '<div class="toolbar"><select id="banJail" style="width:auto;min-width:220px">' +
+    // 顶部一整行：Jail 选择器 + 手动封禁输入与按钮 + 解封全部。
+    // 「解封全部」是这一页唯一的破坏性操作，推到最右并用淡红描边分开，
+    // 不再让它单独占一行、也不再用它与卡片标题拼成两块。
+    var banTarget = all ? (active.length ? active[0].name : '') : state.bans.jail;
+    html += '<div class="toolbar ban-bar">' +
+      '<select id="banJail" style="width:auto;min-width:220px">' +
       option(BAN_ALL, t('ban.allJailsOption'), state.bans.jail) +
       active.map(function (j) { return option(j.name, j.name, state.bans.jail); }).join('') +
       '</select>' +
-      '<div class="spacer" style="flex:1"></div>' +
-      (all
-        ? ("<button class=\"btn danger\" data-act=\"unban-all-jails\">" + t('ban.unbanAllJails') + "</button>")
-        : '<button class="btn danger" data-act="unban-all" data-name="' + esc(state.bans.jail) + ("\">" + t('ban.unbanAll') + "</button>")) +
-      '</div>';
-
-    // 手动封禁必须落到具体 Jail：汇总视图下默认用第一个运行中的 Jail
-    var banTarget = all ? (active.length ? active[0].name : '') : state.bans.jail;
-    html += ("<div class=\"card\"><h3>" + t('ban.manualTitle') + "</h3>") +
-      '<div style="display:flex;gap:8px;max-width:520px">' +
       ("<input type=\"text\" id=\"banIp\" placeholder=\"" + t('ban.manualPlaceholder') + "\">") +
       '<button class="btn primary" data-act="ban" data-name="' + esc(banTarget) + ("\">" + t('common.ban') + "</button>") +
-      '</div>' +
+      '<div class="spacer" style="flex:1"></div>' +
       (all
-        ? ("<div class=\"help\">" + t('ban.manualSummaryPrefix') + " <span class=\"mono\">") + esc(banTarget || '—') +
-          ("</span>" + t('ban.manualSummarySuffix') + "</div>")
-        : '') +
+        ? ("<button class=\"btn unban-all\" data-act=\"unban-all-jails\">" + t('ban.unbanAllJails') + "</button>")
+        : '<button class="btn unban-all" data-act="unban-all" data-name="' + esc(state.bans.jail) + ("\">" + t('ban.unbanAll') + "</button>")) +
       '</div>';
 
     html += all ? renderBanSummary(state.bans.all) : renderBanList(state.bans.status);
@@ -1635,9 +1618,7 @@
   function renderFilters() {
     var host = $('#view');
     var sel = state.filterSel;
-    var html = ("<div class=\"view-head\"><h2>" + t('nav.filters') + "</h2>") +
-      ("<span class=\"hint\">" + t('filter.definedInPrefix') + " <span class=\"mono\">") + esc(state.meta.paths.filterD) + '</span></span>' +
-      '<div class="spacer"></div>' +
+    var html = '<div class="view-head"><div class="spacer"></div>' +
       ("<button class=\"btn primary\" data-act=\"filter-new\">+ " + t('filter.newTitle') + "</button>") +
       (state.filterTemplates.length
         ? ("<button class=\"btn\" data-act=\"filter-template\">" + t('filter.fromTemplate') + "</button>")
@@ -1902,23 +1883,51 @@
     return settings;
   }
 
+  /* 维护分区：导出 / 自动备份 / 备份文件，三张卡片竖排。
+     结构照维护页的通行做法：每张卡一副标题 + 说明 + 动作，
+     动作放卡片里而不是塞进标题行，标题行只留右侧的单个主按钮。 */
   function renderBackupCard() {
     var data = state.backup;
-    if (!data) return '';
+    if (!data) return '<div class="card">' + t('fnk.loadingInline') + '</div>';
     var settings = data.settings;
     var status = settings.lastStatus;
 
-    // 表单区与备份清单分成上下两块，而不是左右两栏：两栏里每边只有 ~570px，
-    // 清单塞进去后文件名与时间列互相挤，时间被折成两行、文件名全变成同一个省略号。
-    // 表单自己用两列网格排，清单占满整张卡片宽度。
-    var html = '<div class="card">' + cardHead(t('set.backupTitle'),
-      '<button class="btn sm primary" data-act="backup-run">' + t('set.backupNow') + '</button>') +
-      '<div class="grid cols-2" style="align-items:start"><div>' +
-      switchRowFor('backup', 'enabled', t('set.backupEnable'), settings.enabled,
-        t('set.backupEnableHelp')) +
-      ("<div class=\"field\"><label>" + t('set.backupDir') + "</label>") +
+    // ① 导出
+    var html = '<div class="card">' + cardHead(t('maint.exportTitle')) +
+      '<p class="dim card-desc">' + esc(t('maint.exportDesc')) + '</p>' +
+      '<div class="card-acts top">' +
+      '<button class="btn" data-act="backup-export">' + t('maint.exportDownload') + '</button>' +
+      '<button class="btn" data-act="backup-run">' + t('maint.exportToDir') + '</button>' +
+      '</div>' +
+      '<div class="card-hint">' + esc(t('maint.exportHint')) + '</div>' +
+      '<div class="card-note">' + esc(t('maint.exportScope')) + '</div>' +
+      '<div class="sep"></div>' +
+      '<dl class="kv">' +
+      kv(t('maint.dirLabel'), '<span class="mono">' + esc(data.directory || '—') + '</span>') +
+      kv(t('maint.defaultDir'), '<span class="mono">' + esc(data.defaultDirectory || '—') + '</span>') +
+      '</dl></div>';
+
+    // ② 自动备份
+    html += '<div class="card">' + cardHead(t('set.backupTitle')) +
+      '<p class="dim card-desc">' + esc(t('set.backupEnableHelp')) + '</p>' +
+      '<div class="swrow">' +
+      '<div class="swtext"><div class="swname">' + esc(t('set.backupEnable')) + '</div>' +
+      '<div class="hint">' + esc(t('maint.autoDesc')) + '</div></div>' +
+      switchToggle('data-toggle-backup', 'enabled', settings.enabled, t('set.backupEnable')) +
+      '</div>' +
+      '<div class="form-grid">' +
+      '<div class="field"><label>' + t('set.backupInterval') + '</label><select id="bkInterval">' +
+      BACKUP_INTERVALS.map(function (hours) {
+        return option(hours, hours < 24 ? t('unit.hours', { n: hours })
+          : t('unit.days', { n: hours / 24 }), settings.intervalHours);
+      }).join('') + '</select></div>' +
+      '<div class="field"><label>' + t('set.backupKeep') + '</label>' +
+      '<input type="number" id="bkKeep" min="1" max="200" value="' + esc(settings.keep) + '">' +
+      '<div class="hint">' + t('set.backupKeepHelp') + '</div></div>' +
+      '</div>' +
+      '<div class="field"><label>' + t('set.backupDir') + '</label>' +
       '<input type="text" id="bkDirectory" list="bkLocations" value="' +
-      esc(data.directory || '') + ("\" placeholder=\"" + t('set.backupDirPlaceholder') + "\">") +
+      esc(data.directory || '') + '" placeholder="' + esc(t('set.backupDirPlaceholder')) + '">' +
       '<datalist id="bkLocations">' +
       (data.locations || []).map(function (item) {
         // 后端给 kind + 路径变量，标签在本地按语言拼，英文界面才不会出现中文
@@ -1932,60 +1941,71 @@
         }
         return '<option value="' + esc(item.path) + '">' + esc(tSrc(label)) + '</option>';
       }).join('') + '</datalist>' +
-      ("<div class=\"help\">" + t('set.backupDirHelp')) +
-      t('set.backupDirFallbackInline', { path: esc(data.defaultDirectory) }) +
-      '</div><div>' +
-      ("<div class=\"field\"><label>" + t('set.backupInterval') + "</label><select id=\"bkInterval\">") +
-      BACKUP_INTERVALS.map(function (hours) {
-        return option(hours, hours < 24 ? t('unit.hours', { n: hours }) : t('unit.days', { n: hours / 24 }),
-          settings.intervalHours);
-      }).join('') + '</select></div>' +
-      ("<div class=\"field\"><label>" + t('set.backupKeep') + "</label>") +
-      '<input type="number" id="bkKeep" min="1" max="200" value="' +
-      esc(settings.keep) + ("\"><div class=\"help\">" + t('set.backupKeepHelp') + "</div></div>") +
-      switchRowFor('backup', 'includeNotifications', t('set.backupIncludeNotif'),
-        settings.includeNotifications, t('set.backupIncludeNotifHelp')) +
-      '</div></div>' +
-      (status
-        ? ('<div class="help">' + t('set.backupLastPrefix')) + esc(fmtTime(status.time)) +
-          ' · ' + (status.ok
-            ? t('set.backupOkInline')
-            : t('set.backupFailedInline')) +
-          ' ' + esc(localizeStatusMessage(status)) + '</div>'
-        : '') +
-      '<div class="bklist">' +
-      // 固定列宽 + 时间列 nowrap：auto 布局下「2026-11-08 19:17:50」会从中间折成两行，
-      // 每行高度都不一样，扫一眼看不出哪条最新。
-      '<div class="table-wrap"><table class="ttable tbackup"><thead><tr>' +
-      ("<th>" + t('set.backupFiles') + "</th><th class=\"num\">" + t('common.size') + "</th><th class=\"c-when\">" + t('common.time') + "</th><th class=\"c-acts\"></th></tr></thead><tbody>");
+      '<div class="hint">' + t('set.backupDirHelp') + '</div></div>' +
+      '<div class="swrow last">' +
+      '<div class="swtext"><div class="swname">' + esc(t('set.backupIncludeNotif')) + '</div>' +
+      '<div class="hint">' + esc(t('set.backupIncludeNotifHelp')) + '</div></div>' +
+      switchToggle('data-toggle-backup', 'includeNotifications', settings.includeNotifications,
+        t('set.backupIncludeNotif')) +
+      '</div>' +
+      '<div class="sep"></div>' +
+      '<dl class="kv">' +
+      kv(t('maint.lastSuccess'), status && status.ok
+        ? '<span class="mono">' + esc(fmtTime(status.time)) + '</span>'
+        : '<span class="faint">' + t('maint.none') + '</span>') +
+      kv(t('maint.lastError'), status && !status.ok
+        ? '<span style="color:var(--danger)">' + esc(localizeStatusMessage(status)) + '</span>'
+        : '<span class="faint">' + t('maint.none') + '</span>') +
+      '</dl>' +
+      '<div class="card-acts">' +
+      '<button class="btn primary" data-act="backup-save">' + t('common.saveSettings') + '</button>' +
+      '<button class="btn" data-act="backup-run">' + t('set.backupNow') + '</button>' +
+      '</div></div>';
 
-    if (!data.backups.length) {
-      html += t('set.backupEmptyInline');
+    // ③ 备份文件：三列（创建时间 / 大小 / 恢复·删除），表头右侧挂条数。
+    // 文件名只是归档命名规则，用户关心的是「什么时候备的」，所以把时间戳
+    // 拆出来单独成列并按时间倒序，最新的那份永远在第一行。
+    var backups = (data.backups || []).slice().sort(function (a, b) {
+      return (Number(b.mtime) || 0) - (Number(a.mtime) || 0);
+    });
+    html += '<div class="card">' + cardHead(t('set.backupFiles'),
+      '<span class="chip">' + backups.length + '</span>');
+    if (!backups.length) {
+      html += '<div class="faint">' + t('set.backupEmpty') + '</div>';
     } else {
-      data.backups.slice(0, 12).forEach(function (item) {
+      html += '<div class="bscroll"><div class="table-wrap"><table class="ttable tbackup">' +
+        '<thead><tr>' +
+        '<th>' + t('set.backupCreatedAt') + '</th>' +
+        '<th class="num">' + t('common.size') + '</th>' +
+        '<th class="acts-col"></th>' +
+        '</tr></thead><tbody>';
+      backups.forEach(function (item) {
         html += '<tr>' +
-          '<td class="c-name"><span class="bname" title="' + esc(item.name) + '">' +
-          esc(item.name) + '</span></td>' +
-          '<td class="num">' + esc(fmtSize(item.size)) + '</td>' +
-          '<td class="hint c-when">' + esc(fmtTime(item.mtime)) + '</td>' +
-          '<td class="c-acts"><div class="cell-actions">' +
-          '<a class="btn sm" href="api/backup/download?name=' +
-          encodeURIComponent(item.name) + ("\">" + t('common.download') + "</a>") +
+          '<td class="bcname"><div class="mono ellipsis bname" title="' + esc(item.name) + '">' +
+          esc(backupLabel(item.name)) + '</div></td>' +
+          '<td class="num mono">' + esc(fmtSize(item.size)) + '</td>' +
+          '<td class="acts-col"><div class="acts">' +
+          '<button class="btn sm" data-act="backup-restore" data-name="' +
+          esc(item.name) + '">' + t('set.backupRestore') + '</button>' +
           '<button class="btn sm danger" data-act="backup-delete" data-name="' +
-          esc(item.name) + ("\">" + t('common.delete') + "</button>") +
+          esc(item.name) + '">' + t('common.delete') + '</button>' +
           '</div></td></tr>';
       });
+      html += '</tbody></table></div></div>';
     }
-    html += '</tbody></table></div>' +
-      ('<div class="help">' + t('set.backupNote1')) +
-      (t('set.backupNote2') + '</div>') +
-      '</div>' +
-      // 保存按钮放整张卡片最底：上面是表单与清单，动作在最后一个位置，
-      // 不用在表格中间找一个按钮。
-      cardFoot('<button class="btn primary" data-act="backup-save">' +
-        t('common.saveSettings') + '</button>') +
-      '</div>';
+    html += '</div>';
     return html;
+  }
+
+  /* 备份文件名是 fn-fail2ban-auto-20261108-191750.tar.gz，直接显示一列
+     长得几乎一样的字符串认不出哪条最新。把时间戳抽出来单独排版。 */
+  function backupLabel(name) {
+    var match = /(\d{8})-(\d{6})/.exec(String(name || ''));
+    if (!match) return name;
+    var d = match[1];
+    var t6 = match[2];
+    return d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6, 8) + ' ' +
+      t6.slice(0, 2) + ':' + t6.slice(2, 4) + ':' + t6.slice(4, 6);
   }
 
   /* ------------------------------------------------------ 白名单编辑 */
@@ -2074,14 +2094,14 @@
         state.ignoreIpDraft = splitIgnoreIp(d.values && d.values.ignoreip);
       }));
     }
-    if (tab === 'policy') {
+    if (tab === 'policy' || tab === 'about') {
       needSettings();
     } else if (tab === 'notify') {
       tasks.push(api('notifications').then(function (d) {
         state.notifications = d;
         restartBrowserNotify();
       }), loadDeliveries());
-    } else if (tab === 'backup') {
+    } else if (tab === 'maint') {
       tasks.push(api('backup').then(function (d) { state.backup = d; }));
     } else if (tab === 'storage') {
       tasks.push(api('storage').then(function (d) { state.storage = d; }));
@@ -2093,8 +2113,6 @@
         state.update.lastFailAt = 0;
         paintUpdateDot();
       }));
-    } else if (tab === 'about') {
-      needSettings();
     } else if (tab === 'guide') {
       // 「说明」列的是真实路径与端口：settings 给写入位置，fnknock 给敲门那几张
       needSettings();
@@ -2108,11 +2126,9 @@
     return tasks;
   }
 
+  // 一次只展开一个分区，用顶部标签条切换。
   function renderSettings() {
     var host = $('#view');
-    var data = state.settings;
-    var prefs = state.prefs || {};
-
     var html = settingsWorkbarHtml();
     html += '<div id="setPanel">' + settingsTabHtml(state.setTab) + '</div>';
     host.innerHTML = html;
@@ -2140,7 +2156,7 @@
       case 'appearance': return renderSetAppearance();
       case 'policy': return renderSetPolicy();
       case 'notify': return renderNotifications(true);
-      case 'backup': return renderSetBackup();
+      case 'maint': return renderSetBackup();
       case 'storage': return renderStorage(true);
       case 'update': return renderUpdate(true);
       case 'guide': return renderSetGuide();
@@ -2162,10 +2178,12 @@
       (actions ? '<div class="spacer"></div>' + actions : '') + '</div>';
   }
 
-  // 分区顶部的一句话说明 + 卡片。标题已在顶栏与标签条里，这里不再重复 h2。
-  // 分区说明 + 内容。说明行复用 .help（小号灰字），间距由 .card-head 与卡片自身负责。
+  /* 分区内容。分区标题由 .set-sec-title 承担，这里不再输出第二行灰字说明：
+     一行「影响面板本身的操作习惯，不改动 fail2ban 配置」这类话既占高度，
+     也没有告诉用户具体能改什么，卡片里的字段标签已经说清了。
+     hint 参数保留在签名上，避免各调用点逐个改。 */
   function setSection(hint, bodyHtml) {
-    return '<div class="help">' + esc(hint) + '</div>' + (bodyHtml || '');
+    return bodyHtml || '';
   }
 
   function prefsOf() {
@@ -2619,32 +2637,29 @@
   function deliveryCardHtml() {
     var payload = deliveryPayload() || { items: [], total: 0, kept: 0 };
     var items = payload.items || [];
+    // 卡片头一行放「标题 → 筛选分段 → 刷新 → 清空」：四个都在同一条 flex 上，
+    // 筛选不再单独占一行，刷新与清空也不再掉到卡片底部去。
     var html = '<div class="card">' + cardHead(t('notify.delivTitle'),
-      '<button class="btn sm" data-act="deliv-refresh">' + t('common.refresh') + '</button>') +
-      '<div class="help">' + esc(t('notify.delivHint')) +
-      (payload.kept ? ' ' + esc(t('notify.delivKept', { n: payload.kept })) : '') +
-      '</div>';
-
-    html += '<div class="toolbar"><div class="segmented">' +
+      '<div class="seg">' +
       [['all', 'notify.delivFilterAll'], ['ok', 'notify.delivFilterOk'], ['fail', 'notify.delivFilterFail']]
         .map(function (pair) {
-          return '<button data-act="deliv-filter" data-status="' + pair[0] + '"' +
-            (state.deliv.status === pair[0] ? ' class="active"' : '') + '>' +
+          return '<button type="button" data-act="deliv-filter" data-status="' + pair[0] + '"' +
+            (state.deliv.status === pair[0] ? ' class="on"' : '') + '>' +
             t(pair[1]) + '</button>';
         }).join('') +
       '</div>' +
-      '<div class="spacer"></div>' +
-      (items.length ? '<span class="deliv-count">' +
-        esc(t('common.count', { n: payload.total || items.length })) + '</span>' : '') +
-      '</div>';
+      '<button class="btn sm" data-act="deliv-refresh">' + t('common.refresh') + '</button>' +
+      '<button class="btn sm danger" data-act="deliv-clear">' + t('notify.delivClear') + '</button>') +
+      '<p class="dim card-desc">' + esc(t('notify.delivHint')) +
+      (payload.kept ? ' ' + esc(t('notify.delivKept', { n: payload.kept })) : '') +
+      '</p>';
 
     if (!items.length) {
       html += '<div class="empty">' + t('notify.delivEmpty') + '</div>';
     } else {
       html += '<div class="deliv-list">' + items.map(deliveryRowHtml).join('') + '</div>';
     }
-    return html + cardFoot('<button class="btn danger ghost" data-act="deliv-clear">' +
-      t('notify.delivClear') + '</button>') + '</div>';
+    return html + '</div>';
   }
 
   function loadDeliveries() {
@@ -2670,98 +2685,90 @@
     if (!data) return t('fnk.loadingInline');
     var s = data.settings;
 
-    var html = '<div class="help">' + esc(t('notify.hint')) + '</div>' +
-      '<div class="toolbar">' +
-      '<div class="spacer"></div>' +
-      '<button class="btn sm primary" data-act="channel-new">' +
-      t('notify.addChannel') + '</button></div>' +
-      '<div class="grid cols-3" style="align-items:start">';
+    // 三张竖排卡片：通知（总开关 + 子开关）→ 通知渠道 → 投递记录。
+    // 卡片头「标题 + 间隙 + 行内动作」，动作紧贴标题右侧，不再单独占一行。
+    var html = '';
 
-    html += '<div class="card">' + cardHead(t('notify.masterTitle')) +
-      switchRow('enabled', t('notify.enablePush'), s.enabled, t('notify.enablePushHelp')) +
-      switchRow('browserNotify', t('notify.browserNotify'), s.browserNotify,
-        t('notify.browserNotifyHelp')) +
-      '<div class="field"><label>' + t('notify.pollInterval') + '</label>' +
-      '<input type="number" id="notifInterval" min="10" max="3600" value="' +
-      esc(s.pollInterval) + '">' +
-      '<div class="help">' + t('notify.pollHelp') + '</div></div>' +
-      cardFoot('<button class="btn primary" data-act="notif-save">' +
-        t('common.saveSettings') + '</button>') +
+    html += '<div class="card">' + cardHead(t('notify.masterTitle'),
+      '<button class="btn sm primary" data-act="notif-save">' +
+      t('common.saveSettings') + '</button>') +
+      '<div class="help help-tight">' + esc(t('notify.hint')) + '</div>' +
+      '<div class="swrow">' +
+      '<div class="swtext"><div class="swname">' + esc(t('notify.enablePush')) + '</div>' +
+      '<div class="hint">' + esc(t('notify.enablePushHelp')) + '</div></div>' +
+      switchToggle('data-toggle-notif', 'enabled', s.enabled, t('notify.enablePush')) +
+      '</div>' +
+      '<div class="swrow">' +
+      '<div class="swtext"><div class="swname">' + esc(t('notify.browserNotify')) + '</div>' +
+      '<div class="hint">' + esc(t('notify.browserNotifyHelp')) + '</div></div>' +
+      switchToggle('data-toggle-notif', 'browserNotify', s.browserNotify, t('notify.browserNotify')) +
       '</div>';
 
-    html += '<div class="card">' + cardHead(t('notify.eventsTitle')) + '<div class="evgrid">' +
-      (data.eventTypes || []).map(function (item) {
-        var on = !!s.events[item.key];
-        return '<div class="evrow" data-act="event-toggle" data-key="' + esc(item.key) + '">' +
-          switchToggle('data-toggle-notif', 'events.' + item.key, on, tSrc(item.label)) +
-          '<div class="evtext"><b>' + esc(tSrc(item.label)) + '</b>' +
-          (item.help ? '<span class="d">' + esc(tSrc(item.help)) + '</span>' : '') +
-          '</div></div>';
-      }).join('') + '</div></div>';
+    // 事件开关逐个成行，与上面两个开关同一种排版
+    (data.eventTypes || []).forEach(function (item) {
+      var on = !!s.events[item.key];
+      html += '<div class="swrow">' +
+        '<div class="swtext"><div class="swname">' + esc(tSrc(item.label)) + '</div>' +
+        (item.help ? '<div class="hint">' + esc(tSrc(item.help)) + '</div>' : '') +
+        '</div>' +
+        switchToggle('data-toggle-notif', 'events.' + item.key, on, tSrc(item.label)) +
+        '</div>';
+    });
+
+    html += '<div class="swrow last">' +
+      '<div class="swtext"><div class="swname">' + esc(t('notify.pollInterval')) + '</div>' +
+      '<div class="hint">' + esc(t('notify.pollHelp')) + '</div></div>' +
+      '<input type="number" id="notifInterval" min="10" max="3600" value="' +
+      esc(s.pollInterval) + '">' +
+      '</div>';
 
     var notifyF2b = data.fail2ban || {};
-    html += '<div class="card">' + cardHead(t('notify.serviceTitle')) + '<dl class="kv">' +
+    html += '<div class="sep"></div><dl class="kv">' +
       kv('fail2ban', notifyF2b.installed
         ? (notifyF2b.running
           ? t('notify.badgeRunning')
           : t('notify.badgeStopped'))
         : t('dash.badgeNotInstalled')) +
-      kv(t('notify.channelsTitle'), t('notify.channelsCount', { total: s.channels.length, enabled:
-        s.channels.filter(function (c) { return c.enabled; }).length })) +
-      kv(t('notify.pollState'), s.enabled || s.browserNotify ? t('notify.pollEvery', { n: s.pollInterval }) : t('notify.pollDisabled')) +
-      '</dl>' +
-      '<div class="help">' + t('notify.note') + '</div>' +
-      '</div>';
+      kv(t('notify.pollState'), s.enabled || s.browserNotify
+        ? t('notify.pollEvery', { n: s.pollInterval }) : t('notify.pollDisabled')) +
+      '</dl></div>';
 
-    html += t('notify.channelsTitleInline');
+    // 通知渠道
+    html += '<div class="card">' + cardHead(t('notify.channelsTitle'),
+      '<button class="btn sm primary" data-act="channel-new">' +
+      t('notify.addChannel') + '</button>');
     if (!s.channels.length) {
-      html += '<div class="empty">' + t('notify.channelsEmpty1') +
-        t('notify.channelsEmpty2') + '</div>';
+      html += '<div class="empty">' +
+        '<span class="empty-ic">' + BELL_ICON + '</span>' +
+        esc(t('notify.channelsEmpty1')) +
+        '</div>';
     } else {
+      html += '<div class="chlist">';
       s.channels.forEach(function (channel) {
-        html += '<div class="channel-row' + (channel.enabled ? '' : ' off') + '">' +
-          '<div class="channel-head">' +
-          '<b>' + esc(channel.name || t('common.unnamed')) + '</b>' +
-          ' <span class="chip">' + esc(channelTypeLabel(channelTypeMeta(channel.type))) + '</span>' +
-          (channel.enabled ? '' : ' <span class="chip">' + t('notify.badgeDisabled') + '</span>') +
-          '<div class="channel-summary">' + esc(channelSummary(channel)) + '</div>' +
+        var typeLabel = channelTypeLabel(channelTypeMeta(channel.type));
+        html += '<div class="chrow' + (channel.enabled ? '' : ' off') + '">' +
+          '<span class="chico">' + BELL_ICON + '</span>' +
+          '<div class="chin">' +
+          '<div class="chname">' + esc(channel.name || t('common.unnamed')) + '</div>' +
+          '<div class="chmeta">' + esc(typeLabel + ' · ' +
+            (channel.enabled ? t('notify.badgeRunning') : t('notify.badgeDisabled'))) + '</div>' +
+          '<div class="chsum">' + esc(channelSummary(channel)) + '</div>' +
           '</div>' +
-          '<div class="channel-acts">' +
+          '<div class="spacer"></div>' +
           '<button class="btn sm" data-act="channel-test" data-id="' + esc(channel.id) + '">' +
           t('common.test') + '</button>' +
           '<button class="btn sm" data-act="channel-edit" data-id="' + esc(channel.id) + '">' +
           t('common.edit') + '</button>' +
-          '<button class="btn sm danger ghost" data-act="channel-delete" data-id="' +
+          '<button class="btn sm danger" data-act="channel-delete" data-id="' +
           esc(channel.id) + '">' + t('common.delete') + '</button>' +
-          '</div></div>';
+          '</div>';
       });
+      html += '</div>';
     }
-    html += '</div>';
+    html += '<div class="card-note">' + t('notify.channelsEmpty2') + '</div>' +
+      '</div>';
 
-    var events = data.events || [];
-    html += '<div class="card">' + cardHead(t('notify.historyTitle') +
-      (events.length ? t('common.recentCount', { n: events.length }) : '')) + '';
-    if (!events.length) {
-      html += '<div class="empty">' + t('notify.historyEmpty') +
-        (s.enabled || s.browserNotify ? t('notify.historyEmptyOn') : t('notify.historyEmptyOff')) +
-        '</div>';
-    } else {
-      html += '<div class="event-list">' +
-        events.slice().reverse().map(function (event) {
-          return '<div class="event-item ' + esc(event.type) + '">' +
-            '<span class="ev-dot"></span>' +
-            '<div class="ev-body">' +
-            '<div class="ev-title">' + esc(bilingualPick(event.title)) + '</div>' +
-            '<div class="ev-text">' + esc(bilingualPick(event.text)) + '</div>' +
-            '</div>' +
-            '<span class="ev-time">' + esc(fmtTime(event.time)) + '</span>' +
-            '</div>';
-        }).join('') + '</div>';
-      html += cardFoot('<button class="btn danger ghost" data-act="notif-clear">' +
-        t('notify.clearHistory') + '</button>');
-    }
-    html += '</div>';
-
+    // 投递记录
     html += deliveryCardHtml();
     return html;
   }
@@ -2996,114 +3003,105 @@
     $('#view').innerHTML = '<div class="view-head"><h2>' + t('nav.storage') + '</h2></div>' + body;
   }
 
+  /* 存储分区：一张卡里放「合计 → 明细表 → 清理按钮 → 安装包缓存」。
+     明细表的路径不再单独占一列（列一多，窄屏下整表要横向滚动），
+     改成「项目名一行 + 路径与标签一行」的双行单元格。 */
   function storageHtml() {
     var data = storageReport();
-    var html = '<div class="help">' + esc(t('stor.hint')) + '</div>';
-
-    if (!data) return html + '<div class="card">' + t('fnk.loadingInline') + '</div>';
+    if (!data) return '<div class="card">' + t('fnk.loadingInline') + '</div>';
 
     var items = (data.items || []).slice().sort(function (a, b) {
       return (Number(b.bytes) || 0) - (Number(a.bytes) || 0);
     });
-
-    html += '<div class="card">' + cardHead(t('stor.usageTitle')) +
-      '<div class="help">' + esc(t('stor.varDir')) + ': ' +
-      '<span class="mono">' + esc(data.var_dir || '—') + '</span>' +
-      (data.current_version ? ' · ' + esc(t('stor.currentVersion')) + ' ' +
-        '<span class="mono">' + esc(data.current_version) + '</span>' : '') +
-      '</div>';
-
-    html += '<div class="storage-total">' +
-      '<span class="k">' + t('stor.total') + '</span>' +
-      '<b>' + esc(fmtSize(data.total || 0)) + '</b>' +
-      '<span class="faint">' + esc(t('common.count', { n: items.length })) + '</span>' +
-      '</div>';
-
-    if (!items.length) {
-      html += '<div class="empty">' + t('stor.empty') + '</div>';
-    } else {
-      html += '<div class="table-wrap"><table class="ttable tstorage tfixed"><thead><tr>' +
-        '<th>' + t('stor.colItem') + '</th>' +
-        '<th>' + t('common.size') + '</th>' +
-        '<th>' + t('stor.colFiles') + '</th>' +
-        '<th>' + t('stor.colPath') + '</th>' +
-        '</tr></thead><tbody>';
-      items.forEach(function (item) {
-        html += '<tr><td class="sname">' + esc(storageItemLabel(item)) +
-          (item.nested ? ' <span class="chip">' + esc(t('stor.nested')) + '</span>' : '') +
-          '</td>' +
-          '<td class="mono">' + esc(fmtSize(item.bytes || 0)) + '</td>' +
-          '<td>' + esc(item.files === undefined || item.files === null
-            ? '—' : String(item.files)) + '</td>' +
-          '<td class="mono dim">' + esc(shortenPath(item.path || '')) + '</td>' +
-          '</tr>';
-      });
-      html += '</tbody></table></div>';
-    }
-
-    var logEst = storageEstimateText('logs');
-    var backupEst = storageEstimateText('backups');
-    var allEst = storageEstimateText('all');
-    var snapshotKeep = Number(data.snapshot_keep) || 0;
-    var updateKeepN = Number(data.updates_keep) || 0;
-    html += '<div class="help">' + esc(allEst.text) + '</div>' +
-      cardFoot('<button class="btn danger ghost" data-act="storage-clean" data-target="all" title="' +
-        esc(allEst.text) + '">' + t('stor.cleanAll') + '</button>' +
-        '<button class="btn" data-act="storage-clean" data-target="backups" title="' +
-        esc(backupEst.text) + '">' + t('stor.cleanBackups') + '</button>' +
-        '<button class="btn primary" data-act="storage-clean" data-target="logs" title="' +
-        esc(logEst.text) + '">' + t('stor.cleanLogs') + '</button>') +
-      '</div>';
-
-    // 安装包缓存：update/ 目录下的 .fpk 与半截下载
     var packages = (data.packages || []).slice().sort(function (a, b) {
       return (Number(b.t) || 0) - (Number(a.t) || 0);
     });
-    if (packages.length) {
-      html += '<div class="card">' + cardHead(t('stor.packagesTitle') +
-        ' (' + packages.length + ')') +
-        (updateKeepN ? '<div class="help">' +
-          esc(t('stor.keepNote', { n: updateKeepN })) + '</div>' : '') +
-        '<div class="table-wrap"><table class="ttable tstorage"><thead><tr>' +
-        '<th>' + t('common.name') + '</th><th>' + t('common.size') + '</th>' +
-        '<th>' + t('common.time') + '</th></tr></thead><tbody>' +
-        packages.map(function (item) {
-          return '<tr><td class="sname mono">' + esc(item.name) +
-            (item.partial ? ' <span class="chip err">' +
-              esc(t('stor.partialBadge')) + '</span>' : '') + '</td>' +
-            '<td class="mono">' + esc(fmtSize(item.bytes || 0)) + '</td>' +
-            '<td class="dim">' + esc(fmtTime(item.t)) + '</td></tr>';
-        }).join('') + '</tbody></table></div></div>';
+    var updateKeepN = Number(data.updates_keep) || 0;
+    var logEst = storageEstimateText('logs');
+    var backupEst = storageEstimateText('backups');
+    var allEst = storageEstimateText('all');
+
+    var html = '<div class="card">' + cardHead(t('stor.usageTitle'),
+      '<button class="btn sm" data-act="storage-refresh">' + t('common.refresh') + '</button>') +
+      '<p class="dim card-desc">' + esc(t('stor.hint')) + '</p>';
+
+    // 合计条：标签 / 数值 / 目录三段同一行基线对齐
+    html += '<div class="storage-total">' +
+      '<span class="k">' + t('stor.total') + '</span>' +
+      '<b class="mono">' + esc(fmtSize(data.total || 0)) + '</b>' +
+      '<span class="faint mono">' + esc(data.var_dir || '—') + '</span>' +
+      '</div>';
+
+    if (!items.length) {
+      html += '<div class="faint">' + t('stor.empty') + '</div>';
+    } else {
+      html += '<div class="bscroll storage-scroll"><div class="table-wrap">' +
+        '<table class="ttable tstorage"><thead><tr>' +
+        '<th>' + t('stor.colItem') + '</th>' +
+        '<th class="num" style="width:96px">' + t('common.size') + '</th>' +
+        '<th class="num hide-sm" style="width:78px">' + t('stor.colFiles') + '</th>' +
+        '</tr></thead><tbody>';
+      items.forEach(function (item) {
+        var files = (item.files === undefined || item.files === null) ? '—' : String(item.files);
+        html += '<tr><td class="sname">' +
+          '<div class="ellipsis">' + esc(storageItemLabel(item)) +
+          (item.nested ? ' <span class="chip">' + esc(t('stor.nested')) + '</span>' : '') +
+          '</div>' +
+          '<div class="sub mono ellipsis" title="' + esc(item.path || '') + '">' +
+          esc(item.path || '') + '</div>' +
+          '</td>' +
+          '<td class="num mono">' + esc(item.bytes ? fmtSize(item.bytes) : '—') + '</td>' +
+          '<td class="num mono hide-sm">' + esc(files) + '</td>' +
+          '</tr>';
+      });
+      html += '</tbody></table></div></div>';
     }
 
-    var backups = (data.backups || []).slice().sort(function (a, b) {
-      return (Number(b.mtime) || 0) - (Number(a.mtime) || 0);
-    });
-    html += '<div class="card">' + cardHead(t('stor.backupsTitle') +
-      (backups.length ? ' (' + backups.length + ')' : '')) +
-      (data.keep ? '<div class="help">' + esc(t('stor.keepNote', { n: data.keep })) +
-        (snapshotKeep ? ' · ' + esc(t('stor.snapshotNote', { n: snapshotKeep })) : '') +
-        '</div>' : '');
-    if (!backups.length) {
-      html += '<div class="empty">' + t('stor.backupsEmpty') + '</div>';
+    // 清理动作：三个常规清理在左，「全部清理」用危险态推到最右
+    html += '<div class="sep"></div>' +
+      '<div class="row wrap" style="gap:8px">' +
+      '<button class="btn" data-act="storage-clean" data-target="backups" title="' +
+      esc(backupEst.text) + '">' + t('stor.cleanBackups') + '</button>' +
+      '<span class="faint" style="font-size:12.5px">' + esc(t('stor.keepNote', { n: data.keep || 2 })) +
+      '</span>' +
+      '<button class="btn" data-act="storage-clean" data-target="logs" title="' +
+      esc(logEst.text) + '">' + t('stor.cleanLogs') + '</button>' +
+      '<div class="spacer"></div>' +
+      '<button class="btn danger" data-act="storage-clean" data-target="all" title="' +
+      esc(allEst.text) + '">' + t('stor.cleanAll') + '</button>' +
+      '</div>' +
+      '<div class="card-note">' + esc(t('stor.noteKeep')) + '</div>';
+
+    // 安装包缓存
+    html += '<h4 class="storage-h4">' + t('stor.packagesTitle') + '</h4>';
+    if (!packages.length) {
+      html += '<div class="faint">' + t('stor.packagesEmpty') + '</div>';
     } else {
-      html += '<div class="table-wrap"><table class="ttable tstorage"><thead><tr>' +
+      html += '<div class="bscroll storage-scroll"><div class="table-wrap">' +
+        '<table class="ttable tstorage"><thead><tr>' +
         '<th>' + t('common.name') + '</th>' +
-        '<th>' + t('common.size') + '</th>' +
-        '<th>' + t('common.time') + '</th>' +
-        '<th></th></tr></thead><tbody>';
-      backups.forEach(function (item) {
-        html += '<tr><td class="sname mono">' + esc(item.name) + '</td>' +
-          '<td class="mono">' + esc(fmtSize(item.size || 0)) + '</td>' +
-          '<td class="dim">' + esc(fmtTime(item.mtime)) + '</td>' +
-          '<td><div class="cell-actions">' +
-          '<button class="btn sm danger ghost" data-act="backup-delete" data-name="' +
-          esc(item.name) + '">' + t('common.delete') + '</button>' +
-          '</div></td></tr>';
+        '<th class="num" style="width:96px">' + t('common.size') + '</th>' +
+        '</tr></thead><tbody>';
+      packages.forEach(function (item) {
+        html += '<tr><td class="sname">' +
+          '<div class="mono ellipsis" title="' + esc(item.name) + '">' + esc(item.name) + '</div>' +
+          '<div class="sub">' +
+          (item.partial
+            ? '<span class="chip err">' + esc(t('stor.partialBadge')) + '</span>'
+            : '<span class="faint">' + esc(fmtTime(item.t)) + '</span>') +
+          '</div></td>' +
+          '<td class="num mono">' + esc(fmtSize(item.bytes || 0)) + '</td>' +
+          '</tr>';
       });
-      html += '</tbody></table></div>';
+      html += '</tbody></table></div></div>';
+    }
+    if (updateKeepN) {
+      html += '<div class="card-note">' + esc(t('stor.keepNote', { n: updateKeepN })) + '</div>';
     }
     html += '</div>';
+
+    // 备份文件清单不在这里：存储页只回答「谁占了空间、能回收多少」，
+    // 文件的恢复 / 删除在「维护」分区里做，同一份清单只出现一次。
     return html;
   }
 
@@ -3701,50 +3699,132 @@
     return api(params).then(function (data) { state.logs = data; });
   }
 
-  function highlight(line) {
-    var safe = esc(line);
-    if (/\bBan\b/.test(line) || /\[.*?\] Ban /.test(line)) safe = '<span class="l-ban">' + safe + '</span>';
-    else if (/\bUnban\b/.test(line)) safe = '<span class="l-unban">' + safe + '</span>';
-    else if (/Found\b/.test(line) || /\bWARNING\b/.test(line)) safe = '<span class="l-found">' + safe + '</span>';
-    else if (/\bERROR\b/.test(line) || /\bCRITICAL\b/.test(line)) safe = '<span class="l-ban">' + safe + '</span>';
-    else safe = '<span class="l-warn">' + safe + '</span>';
-    return safe;
+  /* 日志级别：fail2ban.log 每行形如
+     「2026-11-06 00:07:12,345 fail2ban.actions [123]: NOTICE [sshd] Ban 1.2.3.4」。
+     归类只看级别词与动作词，不解析时间戳 —— 时间戳在这里只用于显示。 */
+  var LOG_LEVELS = ['all', 'ban', 'unban', 'found', 'warn', 'error'];
+
+  function logLevelLabel(id) {
+    var map = {
+      all: t('log.levelAll'), ban: t('log.levelBan'), unban: t('log.levelUnban'),
+      found: t('log.levelFound'), warn: t('log.levelWarn'), error: t('log.levelError')
+    };
+    return map[id] || id;
+  }
+
+  function logLevelOf(line) {
+    if (/\bERROR\b|\bCRITICAL\b/.test(line)) return 'error';
+    if (/\bUnban\b/.test(line)) return 'unban';
+    if (/\bBan\b/.test(line)) return 'ban';
+    if (/\bWARNING\b/.test(line)) return 'warn';
+    if (/\bFound\b/.test(line)) return 'found';
+    return 'all';
+  }
+
+  /* 一行日志拆成「时间戳 + 消息」。前缀是固定的
+     「YYYY-MM-DD HH:MM:SS,mmm 」，拆不出来时整行当消息、时间留空。
+
+     fail2ban 会把整条内部命令（连同里面的换行）原样写进日志，
+     于是一条记录里可能嵌着几十行、上万字符 —— 直接按一个 .logline 渲染，
+     会变成一整片挤在卡片里的等宽长文本，完全看不出是一条记录。
+     这里只取首行做「摘要」，其余内容折叠起来，展开按钮才显示全文。 */
+  function splitLogLine(line) {
+    var match = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/.exec(line);
+    if (!match) return { date: '', time: '', message: line };
+    return {
+      date: match[1],
+      time: match[2],
+      message: line.slice(match[0].length).replace(/^[,.]\d+\s+/, '').trim()
+    };
+  }
+
+  // 单行日志的摘要长度上限：超出部分收起，避免一条记录占满整屏
+  var LOG_SUMMARY_MAX = 260;
+
+  // 只命中当前级别筛选的行；「全部」不做过滤
+  function visibleLogLines() {
+    var data = state.logs;
+    if (!data || !data.lines) return [];
+    var level = state.logOpts.level;
+    if (!level || level === 'all') return data.lines;
+    return data.lines.filter(function (line) { return logLevelOf(line) === level; });
+  }
+
+  // 级别 → 行样式类：与列表配色一一对应（封禁红、解封绿、失败琥珀）
+  function logRowClass(level) {
+    if (level === 'ban' || level === 'error') return 'err';
+    if (level === 'unban') return 'ok';
+    if (level === 'found' || level === 'warn') return 'warn';
+    return '';
+  }
+
+  function logLineHtml(line) {
+    var level = logLevelOf(line);
+    var parts = splitLogLine(line);
+    var message = parts.message;
+    var truncated = message.length > LOG_SUMMARY_MAX;
+    var shown = truncated ? message.slice(0, LOG_SUMMARY_MAX) + '…' : message;
+    return '<div class="logline ' + logRowClass(level) + '">' +
+      '<span class="t"><span class="d">' + esc(parts.date) + '</span>' +
+      '<span class="h">' + esc(parts.time) + '</span></span>' +
+      '<span class="m">' + esc(shown) +
+      (truncated
+        // 全文放 title：悬停就能读完，不用为了看一眼把页面撑爆
+        ? '<button type="button" class="log-more" title="' + esc(message) + '"' +
+          ' data-act="log-more">' + t('log.expand') + '</button>'
+        : '') +
+      '</span></div>';
   }
 
   function renderLogs() {
     var host = $('#view');
     var data = state.logs;
-    var html = ("<div class=\"view-head\"><h2>" + t('nav.logs') + "</h2><div class=\"spacer\"></div>") +
-      ("<button class=\"btn\" data-act=\"logs-export\">" + t('common.export') + "</button></div>");
+    var rows = visibleLogLines();
 
-    html += '<div class="toolbar">' +
+    // 级别用分段标签、右侧是自动刷新与刷新按钮 —— 一行放完筛选与动作，
+    // 不再把行数下拉、关键字框、刷新、开关全挤成一排。
+    var html = '<div class="toolbar">' +
+      '<div class="seg" id="logLevelSeg">' +
+      LOG_LEVELS.map(function (id) {
+        return '<button type="button" data-act="log-level" data-level="' + esc(id) + '"' +
+          (state.logOpts.level === id ? ' class="on"' : '') + '>' +
+          esc(logLevelLabel(id)) + '</button>';
+      }).join('') +
+      '</div><div class="spacer"></div>' +
+      '<label class="switch"><input type="checkbox" id="logAuto"' +
+      (state.logOpts.auto ? ' checked' : '') + '><span>' +
+      esc(t('log.autoRefreshShort')) + '</span></label>' +
+      ("<button class=\"btn sm\" data-act=\"logs-refresh\">" + t('common.refresh') + "</button>") +
+      '</div>';
+
+    html += '<div class="card flush" style="max-height:72vh;overflow:auto">';
+    if (!data) {
+      html += '<div class="empty">' + t('fnk.loadingInline') + '</div>';
+    } else if (data.error) {
+      html += '<div class="empty">' + esc(data.error) + '</div>';
+    } else if (!data.lines.length) {
+      html += '<div class="empty">' + t('log.noMatch') + '</div>';
+    } else if (!rows.length) {
+      html += '<div class="empty">' + t('log.noMatch') + '</div>';
+    } else {
+      html += rows.map(logLineHtml).join('');
+    }
+    html += '</div>';
+
+    // 关键字与行数收到页面底部的次要工具条：它们是偶尔调一次的参数，
+    // 放在顶部会把最常用的级别筛选挤下去。
+    html += '<div class="toolbar log-foot">' +
+      ("<input type=\"text\" id=\"logKeyword\" placeholder=\"" + t('log.keywordPlaceholder') + "\" value=\"") + esc(state.logOpts.keyword) + '">' +
       '<select id="logLines" style="width:auto">' +
       [100, 200, 400, 800, 2000].map(function (n) {
         return option(n, t('log.lineCount', { n: n }), state.logOpts.lines);
       }).join('') + '</select>' +
-      ("<input type=\"text\" id=\"logKeyword\" placeholder=\"" + t('log.keywordPlaceholder') + "\" value=\"") + esc(state.logOpts.keyword) + '">' +
-      ("<button class=\"btn\" data-act=\"logs-refresh\">" + t('common.refresh') + "</button>") +
-      '<div class="switch" style="margin-left:6px">' +
-      switchToggle('data-toggle-log', 'auto', state.logOpts.auto, t('log.autoRefresh')) +
-      ("<span class=\"hint\">" + t('log.autoRefresh') + "</span></div>") +
-      '<div class="spacer" style="flex:1"></div>' +
-      (data && data.path ? '<span class="hint mono">' + esc(data.path) + '</span>' : '') +
+      '<div class="spacer"></div>' +
+      ("<button class=\"btn sm\" data-act=\"logs-export\">" + t('common.export') + "</button>") +
       '</div>';
 
-    html += '<div class="card">';
-    if (!data) {
-      html += t('fnk.loadingInline');
-    } else if (data.error) {
-      html += '<div class="empty">' + esc(data.error) + '</div>';
-    } else if (!data.lines.length) {
-      html += t('log.noMatchInline');
-    } else {
-      html += '<div class="log-box" id="logBox">' +
-        data.lines.map(highlight).join('\n') + '</div>';
-    }
-    html += '</div>';
     host.innerHTML = html;
-    var box = $('#logBox');
+    var box = $('.card.flush', host);
     if (box) box.scrollTop = box.scrollHeight;
 
     if (state.logOpts.auto && !logTimer) {
@@ -3796,13 +3876,9 @@
     var pollInterval = (state.notifications && state.notifications.settings &&
       state.notifications.settings.pollInterval) || 30;
 
-    // 页面级工具条：标题、一句话说明、测试与保存。保存放在这里而不是每块各放一个，
-    // 六块共用同一份设置，分开存会让人分不清刚才改的是哪一块。
-    var html = t('fnk.titleInline') +
-      ("<span class=\"hint\">" + t('fnk.hint') + "</span>") +
-      '<div class="spacer"></div>' +
-      ("<button class=\"btn\" data-act=\"fnk-test\">" + t('common.testConnection') + "</button>") +
-      ("<button class=\"btn primary\" data-act=\"fnk-save\">" + t('common.saveSettings') + "</button></div>");
+    // 「测试连接 / 保存设置」放到分区标签条的右端：标签条这一行本来右侧就空着，
+    // 而这两个动作作用于整页六块，贴着标签条比另起一行更贴合它们的适用范围。
+    var html = '';
 
     if (!detected.installed && !detected.running) {
       html += '<div class="banner danger"><div class="banner-body">' +
@@ -3820,15 +3896,21 @@
     host.innerHTML = html;
   }
 
-  // 与设置页同一套标签条：六块一次只展开一块，窄屏横向滚动
+  // 与设置页同一套标签条：六块一次只展开一块，窄屏横向滚动。
+  // 右端放整页共用的两个动作（测试连接 / 保存设置），它们作用于全部六块。
   function fnkWorkbarHtml() {
-    var html = '<div class="workbar" id="fnkWorkbar" role="tablist">';
+    var html = '<div class="workbar fnk-bar" id="fnkWorkbar" role="tablist">';
     FNK_TABS.forEach(function (id) {
       var on = state.fnkTab === id;
       html += '<button type="button" role="tab" data-fnk-tab="' + esc(id) + '"' +
         ' aria-selected="' + (on ? 'true' : 'false') + '"' +
         (on ? ' class="on"' : '') + '>' + esc(fnkTabLabel(id)) + '</button>';
     });
+    html += '<div class="spacer"></div>' +
+      '<button type="button" class="btn sm" data-act="fnk-test">' +
+      t('common.testConnection') + '</button>' +
+      '<button type="button" class="btn sm primary" data-act="fnk-save">' +
+      t('common.saveSettings') + '</button>';
     return html + '</div>';
   }
 
@@ -4759,11 +4841,58 @@
       return;
     }
 
+    // 「导出配置」：先生成一份归档，再直接把这一份下载下来。
+    // 生成与下载分成两步是后端契约决定的（/api/backup/run 只写盘、不回字节），
+    // 前端把两步串起来，用户看到的是一次「导出」。
+    if (act === 'backup-export') {
+      busy(trigger, true);
+      api('backup/run', { method: 'POST', body: {} })
+        .then(function (data) {
+          var name = data && data.name;
+          if (!name) throw new Error(t('common.unknownError'));
+          var link = document.createElement('a');
+          link.href = 'api/backup/download?name=' + encodeURIComponent(name);
+          link.download = name;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          toast(t('set.backupCreatedPrefix') + name, 'ok', 5000);
+          return refresh();
+        })
+        .catch(function (err) { toast(localizeErr(err), 'err', 8000); })
+        .finally(function () { busy(trigger, false); });
+      return;
+    }
+
     if (act === 'backup-delete') {
       if (!confirmDanger(t('set.backupDeleteConfirmInline', { name: name }))) return;
       api('backup/delete', { method: 'POST', body: { name: name } })
         .then(function () { toast(t('set.backupDeleted'), 'ok'); return refresh(); })
         .catch(function (err) { toast(localizeErr(err), 'err'); });
+      return;
+    }
+
+    // 恢复是覆盖性操作：先确认，成功后无论 reload 成没成功都要把整页数据重拉，
+    // 因为 jail 配置可能已经整片换掉了。reload 失败单独提示，不当作恢复失败。
+    if (act === 'backup-restore') {
+      if (!confirmDanger(t('set.backupRestoreConfirm', { name: backupLabel(name) }))) return;
+      busy(trigger, true);
+      api('backup/restore', { method: 'POST', body: { name: name } })
+        .then(function (data) {
+          toast(t('set.backupRestoreDone'), 'ok', 5000);
+          if (data && data.reload && data.reload.ok === false) {
+            toast(t('set.backupRestoreReloadFailed') + (data.reload.error || ''), 'warn', 9000);
+          }
+          // 配置换了，缓存里那些按旧配置渲染的数据全部作废
+          state.settings = null;
+          state.ignoreIpDraft = null;
+          state.jails = [];
+          state.filters = [];
+          state.overview = null;
+          return refresh();
+        })
+        .catch(function (err) { toast(localizeErr(err), 'err', 9000); })
+        .finally(function () { busy(trigger, false); });
       return;
     }
 
@@ -4793,6 +4922,23 @@
         render();
       }).catch(function (err) { toast(localizeErr(err), 'err'); })
         .finally(function () { busy(trigger, false); });
+      return;
+    }
+
+    if (act === 'storage-refresh') {
+      busy(trigger, true);
+      api('storage').then(function (d) {
+        state.storage = d;
+        renderSettings();
+      }).catch(function (err) { toast(localizeErr(err), 'err'); })
+        .finally(function () { busy(trigger, false); });
+      return;
+    }
+
+    if (act === 'log-level') {
+      // 纯前端筛选：日志已经全部拉下来了，切级别不再发请求
+      state.logOpts.level = trigger.dataset.level || 'all';
+      renderLogs();
       return;
     }
 
@@ -4915,11 +5061,12 @@
       return;
     }
 
-    var logTrack = event.target.closest('[data-toggle-log]');
-    if (logTrack) {
-      state.logOpts.auto = !state.logOpts.auto;
+    // 日志页的「自动刷新」是一个普通复选框，直接读它的勾选状态
+    if (event.target && event.target.id === 'logAuto') {
+      state.logOpts.auto = !!event.target.checked;
       if (!state.logOpts.auto) stopLogTimer();
-      renderLogs();
+      else loadLogs().then(function () { if (state.view === 'logs') renderLogs(); })
+        .catch(function () { stopLogTimer(); });
       return;
     }
 
@@ -5049,7 +5196,16 @@
       var text = event.target.value;
       searchTimer = setTimeout(function () {
         state.logOpts.keyword = text;
-        loadLogs().then(function () { if (state.view === 'logs') renderLogs(); });
+        loadLogs().then(function () {
+          if (state.view !== 'logs') return;
+          renderLogs();
+          // 整页重绘会让输入框失焦，光标也回到开头 —— 重新聚焦并摆到末尾
+          var box = $('#logKeyword');
+          if (box) {
+            box.focus();
+            if (box.setSelectionRange) box.setSelectionRange(box.value.length, box.value.length);
+          }
+        });
       }, 320);
     }
   }
@@ -5313,13 +5469,6 @@
     }).catch(function () { /* 取不到会话不影响进入 */ })
       .then(enterApp)
       .then(function () {
-        // 版本行补上引擎版本：/api/service 已经在概览里取了，这里只补展示。
-        // 取不到（没装 fail2ban）就只显示面板版本，不留占位符。
-        var engine = state.overview && state.overview.fail2ban && state.overview.fail2ban.version;
-        if (engine) {
-          setVersionLine((state.meta && state.meta.app && state.meta.app.version) ||
-            (state.session && state.session.version) || '', engine);
-        }
         // 侧栏「更新」红点：读缓存（不发网络），再节流补一次真实检查
         return api('update').then(function (info) {
           state.update.info = info;

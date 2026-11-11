@@ -409,11 +409,12 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 }
 .topbar .tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
+/* 主区域不设宽度上限：宽度由 .app 的 flex 布局自然算出
+   （视口 − 侧栏 − 左右内边距）。给 max-width 会让宽屏上内容缩成中间一窄条、
+   两侧留白，表格却还是那么宽，看起来像没铺满。 */
 main {
   padding: 16px 18px 40px;
-  max-width: 1400px;
   width: 100%;
-  margin: 0 auto;
   flex: 1;
   min-width: 0;
 }
@@ -637,18 +638,30 @@ input[type="search"]:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 22%, transparent);
 }
 
-/* 下拉箭头自己画：原生控件在深色下几乎不可见 */
+/* 下拉箭头自己画：原生控件在深色下几乎不可见。
+   画成一个实心三角（两段渐变拼出上宽下窄的块），比两个细斜线更像
+   「下拉」而不是「收起」。 */
 select {
   appearance: none;
   -webkit-appearance: none;
-  padding-right: 30px;
+  padding-right: 32px;
+  font-size: 13.5px;
   background-image:
     linear-gradient(45deg, transparent 50%, currentColor 50%),
     linear-gradient(135deg, currentColor 50%, transparent 50%);
-  background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%;
+  background-position: calc(100% - 16px) 52%, calc(100% - 11px) 52%;
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
 }
+/* 页面级下拉框（工具栏里的 Jail 选择器、封禁页的 Jail 选择器等）：
+   圆角放大成胶囊、左内边距放宽、字号回到正文 14px —— 定宽 10px 圆角
+   配 13.5px 字在宽工具栏里看起来像被压扁的输入框，认不出是选择器。 */
+.toolbar select {
+  border-radius: 999px;
+  padding-left: 15px;
+  font-size: 14px;
+}
+.toolbar select:hover { border-color: var(--faint); }
 
 textarea { font-family: var(--mono); font-size: 12.5px; }
 input[type="number"] { -moz-appearance: textfield; }
@@ -764,11 +777,8 @@ table.fixed td.c-filter { text-overflow: ellipsis; }
 /* 名称 + 两个徽章要在同一行放得下：最长的是「nginx-probe 已接管 启用」，
    换成英文（Managed / System preset）还要更宽，所以留 240px。 */
 .c-jail { width: 240px; }
-/* 状态列最长是「已启用未运行」徽章，英文是 "Enabled, not running" */
-.c-status { width: 152px; }
 /* 100px 是按英文表头「Current bans」量的：再窄就会把表头截成省略号 */
 .c-count { width: 100px; }
-.c-bantime { width: 88px; }
 .c-filter { width: 96px; }
 /* 概览表列少，日志文件列吃掉剩余宽度；Jail 表列多，单独给它定宽 */
 .c-logpath { width: auto; min-width: 150px; }
@@ -780,54 +790,79 @@ table.fixed td.c-filter { text-overflow: ellipsis; }
 /* Jail 表 11 列，比概览表多出过滤器与三个参数列：单独收窄，
    使各列宽度之和落在 1224px 视口下的可用宽度内（否则整表要横向滚动）。
    英文表头在窄列里折成两行，值本身都不长（3 / 15m / 2h）。 */
-/* 名称与徽章分成两行后，名称列只需放得下最长名字 + 两个徽章，
-   不必再按「名字和徽章同一行」的宽度预留。 */
-.jail-table .c-jail { width: 196px; }
-.jail-table .c-status { width: 118px; }
-.jail-table .c-filter { width: 72px; }
-.jail-table .c-logpath { width: 92px; }
-.jail-table .c-count { width: 70px; }
+/* Jail 表 11 列：名称 / 接管 / 启用 / 运行状态 / maxretry / findtime / bantime /
+   当前封禁 / 累计封禁 / 失败次数 / 操作。
+   宽度按「表头与单元格里最长的那个字符串」实测重排，中英两套界面分别量过：
+   名称 90 / 接管 96 / 启用 92 / 运行状态 100 / 参数 78×3 / 统计 92×3 / 操作 190。
+   余量不是拍脑袋 —— 英文表头比中文长，「Managed」要 85px、「Total bans」要 81px，
+   中文界面下看不出问题，切到英文就被截成省略号。
+   合计 966px，1440 视口（侧栏展开后 1188px）与 900px 视口下都不必横向滚动。 */
+.jail-table .c-jail { width: 90px; }
+/* 三列状态各自的表头长度不同（接管/启用/运行状态 → Managed/Enabled/Run state），
+   一列一个宽度，不靠相邻选择器猜位置。 */
+.jail-table .c-managed { width: 96px; }
+.jail-table .c-enabled { width: 92px; }
+.jail-table .c-runstate { width: 100px; }
+/* 参数列表头是 maxretry / findtime / bantime 这类定长英文，78px 放得下；
+   数值本身只有 3 / 15m / 2h。 */
+.jail-table .c-count { width: 78px; }
+.jail-table td.c-count, .jail-table th.c-count { white-space: nowrap; }
+/* 统计列（当前封禁 / 累计封禁 / 失败次数）：中文四字 74px，
+   英文「Total bans」81px，取 92px 两边都不折行。 */
+.jail-table .c-sum { width: 92px; }
 /* 行内三个按钮（配置 / 日志 / 启动）。英文是 Configure / Logs / Stop，
    按原内边距要 200px 以上，所以表格里的按钮收紧内边距，并把列加宽到 206px。 */
-.jail-table .c-acts { width: 206px; }
-.jail-table .cell-actions .btn { padding: 0 7px; }
-.jail-table th.c-count { white-space: normal; line-height: 1.3; }
+.jail-table .c-acts { width: 190px; }
+.jail-table .cell-actions .btn { padding: 0 6px; gap: 0; }
+.jail-table th.c-count { white-space: nowrap; line-height: 1.3; }
 /* 参数列的值都很短（3 / 15m / 2h），内边距不必留 12px 一边 */
 .jail-table td.c-count, .jail-table th.c-count { padding-left: 8px; padding-right: 8px; }
 .jail-table td.c-acts { padding-left: 6px; padding-right: 8px; }
 
+/* 对齐：名称左对齐（超长一律尾部省略，左对齐才读得出前缀），
+   其余全部居中 —— 这些格子装的是徽章、短数值与参数，居中成列才好竖着比对。 */
+.jail-table th,
+.jail-table td { text-align: center; }
+.jail-table th.c-jail,
+.jail-table td.c-jail { text-align: left; }
+
+/* 操作列居中：名称左对齐，其余各列居中，按钮也跟着居中，
+   否则它贴在最右边缘，与「操作」表头对不齐。 */
+.jail-table td.c-acts .cell-actions { justify-content: center; }
+
+/* 行内按钮补上描边：表格里原本一律是幽灵态（透明边框），
+   一整列「配置 / 日志 / 停止」看起来像三行普通文字，认不出是可点的按钮。 */
+.jail-table td .cell-actions .btn {
+  border-color: var(--border);
+  color: var(--dim);
+}
+.jail-table tbody tr:hover td .cell-actions .btn { color: var(--text); }
+.jail-table td .cell-actions .btn:hover {
+  background: var(--muted);
+  border-color: var(--ring);
+  color: var(--text);
+}
+.jail-table td .cell-actions .btn.danger { color: var(--danger); }
+.jail-table td .cell-actions .btn.danger:hover {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+
+/* 「解封全部 / 解封全部 Jail」：破坏性但可恢复的操作。
+   描边取淡红而不是深灰，跟普通按钮区分开；悬停时才上淡红底。
+   比 .btn.danger 更轻 —— 那套是给「删除」这类不可逆动作用的。 */
+.btn.unban-all {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 34%, var(--border));
+}
+.btn.unban-all:hover:not(:disabled) {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+}
+/* 封禁页顶部一整行：选择器 + 封禁输入 + 解封全部，允许换行但保持同一行基线 */
+.ban-bar input[type="text"] { max-width: 280px; }
+
 .ban-table.wide { min-width: 880px; }
-
-.c-status { white-space: nowrap; }
-/* 状态列里的徽章要完整显示：固定列宽 + overflow:hidden 会把徽章裁成半截，
-   所以徽章本身按内容宽度走，列宽只保证不会换行。 */
-.c-status .badge { max-width: 100%; }
-
-/* 名称 + 徽章固定上下两行：名称一行、徽章一行。
-   挤在同一行时，名字长的会把徽章推下去、名字短的不会，同一列里有的行高两行有的行
-   一行，看上去就是错位。固定成两行后不管名字多长、哪个语言，每行高度都一样。 */
-.jail-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  min-width: 0;
-}
-.jail-cell > strong {
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.jail-badges {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-.jail-badges .badge { flex: 0 0 auto; }
 
 /* 卡片标题右侧的弹性空隙，把排序控件推到最右 */
 .h3-grow { flex: 1 1 auto; }
@@ -985,6 +1020,19 @@ td .cell-actions .btn.danger:hover {
 }
 .toolbar select, .toolbar .select { width: auto; max-width: 320px; }
 .toolbar .btn { flex: 0 0 auto; }
+
+/* 同一行里控件高度必须一致：.btn 是 36px、.btn.sm 是 30px，
+   混排时下边沿会参差不齐。工具栏内一律按 36px 对齐
+   （表格行内不在此列，那里 .sm 保持 30px 是为了压住行高）。 */
+.toolbar .btn,
+.toolbar .btn.sm,
+.toolbar .input,
+.toolbar input[type="text"],
+.toolbar input[type="search"],
+.toolbar select { height: 36px; }
+/* 分段控件整体 36px：外框 4px 内边距 + 内部 28px 按钮 */
+.toolbar .seg { padding: 4px; }
+.toolbar .seg button { height: 28px; }
 
 /* 工具栏搜索框：定宽，窄屏铺满。
    选择器要带上 .toolbar 前缀，否则被上面 `.toolbar input[type="text"]` 的
@@ -1310,6 +1358,60 @@ details.raw pre {
 
 /* ---------------------------------------------------------- 运行日志 --- */
 
+/* 日志行：时间戳一列 + 消息一列，纯列表不带每行边框盒子。
+   时间戳是两段（日期 / 时刻），用 flex + gap 分隔 —— 靠模板换行会被
+   只含空白的文本节点吃掉，两段会贴成「2026-11-0300:07」。 */
+.logline {
+  display: flex;
+  gap: 12px;
+  padding: 5px 14px;
+  border-bottom: 1px solid var(--border-soft);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.logline:last-child { border-bottom: 0; }
+/* 时间列按内容宽度定，不用写死像素：15 个等宽字符约 105px，
+   写 148px 会留下三十多像素的死空，那 12px 间距看起来像 50px。 */
+.logline .t {
+  flex: 0 0 auto;
+  min-width: calc(15ch + 6px);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--faint);
+}
+.logline .t .h { color: var(--dim); }
+.logline .m {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+/* fail2ban 把整条内部命令写进日志时，一条记录能有上万字符。
+   摘要后面跟一个「展开」小按钮，全文放在它的 title 里。 */
+.log-more {
+  margin-left: 8px;
+  padding: 0 6px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--dim);
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.log-more:hover { background: var(--muted); color: var(--text); }
+.logline.err .m { color: var(--log-ban); }
+.logline.ok .m { color: var(--log-unban); }
+.logline.warn .m { color: var(--log-found); }
+
+/* 卡片本身当滚动容器：列表贴着圆角内边距滚，不给它单独一层边框 */
+.card.flush { padding: 0; overflow: hidden; }
+.log-foot { margin-top: var(--gap); margin-bottom: 0; }
+
+/* 遗留的旧写法（.log-box）：设置页说明等地方仍可能有引用，保留兜底 */
 .log-box {
   padding: 12px 14px;
   max-height: 62vh;
@@ -1561,15 +1663,16 @@ details.raw pre {
   .kv dt { font-size: 12px; }
   .kv dd { margin-bottom: 10px; }
 
-  /* 触控目标放大到 ≥44px（行内的小按钮 40px，四周留白补足可点区域） */
-  .btn { height: 44px; padding: 0 16px; }
-  .btn.sm { height: 40px; padding: 0 12px; font-size: 13px; }
-  .icon-btn { width: 44px; height: 44px; flex-basis: 44px; }
+  /* 手机端按钮整体抬一档：36→38、行内小按钮 30→32。
+     抬太高会把卡片里的按钮顶得比标题还显眼，行距也会跟着拉开。 */
+  .btn { height: 38px; padding: 0 14px; }
+  .btn.sm { height: 32px; padding: 0 10px; font-size: 13px; }
+  .icon-btn { width: 40px; height: 40px; flex-basis: 40px; }
   .copy-btn { min-width: 36px; height: 36px; }
   .input, .select, .textarea,
   input[type="text"], input[type="password"], input[type="number"],
   input[type="search"], input[type="email"], input[type="url"],
-  select, textarea { height: 44px; }
+  select, textarea { height: 38px; }
   textarea { height: auto; min-height: 120px; }
   .nav button, .nav .nav-item { min-height: 44px; }
   .segmented button { height: 34px; padding: 0 12px; }
@@ -2165,6 +2268,26 @@ details.raw pre {
   background: var(--danger);
 }
 
+/* fn-knock 标签条右端带两个页面动作：标签条本身是 --muted 底，
+   按钮要跟着这个底色走，不能沿用卡片上的白底描边（会比底更亮）。 */
+.fnk-bar { gap: 4px; }
+.fnk-bar .spacer { flex: 1 1 auto; margin-left: 2px; }
+.fnk-bar .btn.sm {
+  height: 28px;
+  flex: 0 0 auto;
+  border-color: color-mix(in srgb, var(--text) 16%, transparent);
+  background: var(--card);
+}
+.fnk-bar .btn.sm.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-fg);
+}
+@media (max-width: 720px) {
+  /* 窄屏下标签条横向滚动，动作按钮跟着滚到最右即可，不另起一行 */
+  .fnk-bar .btn.sm { padding: 0 9px; font-size: 12.5px; }
+}
+
 /* ------------------------------------------------- 卡片头 / 卡片脚 --- */
 
 /* 卡片标题行：标题在左，行内动作靠右。
@@ -2175,10 +2298,39 @@ details.raw pre {
   align-items: center;
   gap: 8px;
   margin-bottom: 10px;
+  flex-wrap: wrap;
 }
 .card-head > h3,
-.card-head h3 { margin-bottom: 0; }
+.card-head h3 {
+  margin-bottom: 0;
+  /* 标题永远不折行、也不被动作区挤成三行：默认 flex 项会按内容收缩，
+     中文标题在窄屏上会被一个字一行地竖排。 */
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 .card-head .spacer { flex: 1; }
+/* 卡片头里的分段控件与按钮不参与收缩，但要允许换行到下一行 */
+.card-head .seg { flex: 0 0 auto; }
+.card-head .btn { flex: 0 0 auto; }
+/* 窄屏：动作区整体换到标题下一行，标题独占第一行 */
+@media (max-width: 720px) {
+  .card-head { gap: 6px; }
+  .card-head > h3 { flex: 1 1 100%; }
+  .card-head .seg { order: 5; flex: 1 1 100%; }
+  .card-head .seg button { flex: 1; }
+  .card-head .spacer { display: none; }
+  /* 只有徽标的卡片头（如「备份文件」右侧的条数）：标题与徽标一排、徽标靠右。
+     上面让标题独占一行是给分段控件腾地方，这类卡片没有分段控件，照搬只会
+     把徽标挤到第二行、白白多占一行高度。 */
+  .card-head:not(:has(.seg)):not(:has(.btn)) { flex-wrap: nowrap; }
+  .card-head:not(:has(.seg)):not(:has(.btn)) > h3 {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .card-head:not(:has(.seg)):not(:has(.btn)) .spacer { display: block; flex: 1; }
+}
 
 /* 卡片底部动作条：一条上边线把动作区和内容分开，按钮靠右。
    主要动作写在最后（最右），只有一个按钮时也靠右 —— 靠 .spacer 把左边撑开。 */
@@ -2206,44 +2358,12 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
 /* --------------------------------------------------------- 手机端 --- */
 
 @media (max-width: 720px) {
-  /* 触控目标放大到 34px（桌面 30px 偏小），左右留白收窄，
-     让 8 个标签在 390px 宽下少滚一段 */
-  .workbar button { height: 34px; padding: 0 12px; }
+  /* 标签条按钮与桌面同高：它已经贴在分段控件里，上下各有 4px 内边距，
+     再加高只会让整条标签条比卡片标题还厚。左右留白收窄，让 9 个标签少滚一段。 */
+  .workbar button { height: 30px; padding: 0 12px; }
   /* 动作条换行：主要按钮独占一行撑满，次要按钮排在它上面靠右 */
   .card-foot { flex-wrap: wrap; }
   .card-foot .btn.primary { flex: 1 1 100%; }
-}
-
-/* ------------------------------------------------ 备份清单表格 --- */
-
-/* 备份文件名带完整时间戳（fn-fail2ban-auto-20261108-191750.tar.gz），
-   定宽表里靠左对齐会被截掉最有用的尾巴。这里让左侧省略号：
-   direction:rtl + text-align:left 是让浏览器从行首截断的标准写法，
-   而文件名本身保持 LTR 阅读顺序不反转。 */
-/* 清单单独占一张卡片宽度，列宽才有余量：文件名 1fr、大小 88px、时间 156px、动作 132px */
-.ttable.tbackup { table-layout: fixed; min-width: 0; }
-.bklist { margin-top: 4px; }
-.ttable.tbackup th.c-when,
-.ttable.tbackup td.c-when { width: 156px; white-space: nowrap; }
-.ttable.tbackup th.c-acts,
-.ttable.tbackup td.c-acts { width: 132px; }
-.ttable.tbackup td.c-name { min-width: 0; }
-.ttable.tbackup .bname {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  /* 短名（去掉 fn-fail2ban- 前缀后）通常放得下，只留普通尾部省略兜底 */
-}
-.ttable.tbackup .cell-actions { justify-content: flex-end; }
-
-/* 备份卡片左右两栏在窄屏叠成一列，否则表单与表格互相挤 */
-@media (max-width: 900px) {
-  .ttable.tbackup th.c-when,
-  .ttable.tbackup td.c-when { width: 128px; }
-  .ttable.tbackup th.c-acts,
-  .ttable.tbackup td.c-acts { width: 112px; }
 }
 
 /* ============================================= 26.11.18 说明页 / 手机选择器 ==== */
@@ -2413,3 +2533,235 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
   .pathrow-v { flex-wrap: wrap; }
   .pathrow-v .btn { margin-left: auto; }
 }
+
+/* ==================================== 分段控件（.seg） / 设置页分区 ==== */
+
+/* 分段控件：一排互斥标签，选中项用卡片底色浮起来。
+   与进度条式的 .segmented 分开命名 —— 那个自带 margin-bottom 与
+   横向滚动，放进工具栏会把整行往下推。 */
+.seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius);
+  background: var(--muted);
+  flex: 0 0 auto;
+}
+.seg button {
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--dim);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.seg button.on { background: var(--card); color: var(--text); }
+.seg button:hover:not(.on) { color: var(--text); }
+
+
+/* ====================================== 通知分区：开关行 / 渠道行 ==== */
+
+/* 开关行：左文右开关，一行一条，底部一条淡分隔线。
+   与卡片头一起构成「设置页」的统一排版，不再用 field + 独立开关标签。 */
+.swrow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.swrow.last { border-bottom: 0; padding-bottom: 2px; }
+.swtext { flex: 1; min-width: 0; }
+.swname { font-size: 13.5px; font-weight: 500; }
+.swrow .hint { margin-top: 2px; }
+.swrow .switch-track { margin-left: auto; flex: 0 0 auto; }
+/* 行尾的单个输入框（轮询间隔）贴右，宽度按数字框收窄 */
+.swrow > input[type="number"] { flex: 0 0 120px; width: 120px; margin-left: auto; }
+
+/* 通知渠道列表：一条渠道一行，左侧圆形图标 + 名称与类型 + 右侧三个动作 */
+.chlist { display: flex; flex-direction: column; gap: 8px; }
+.chrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.chrow.off { opacity: .62; }
+.chico {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--muted);
+  color: var(--dim);
+}
+.chico svg { width: 16px; height: 16px; }
+.chin { min-width: 0; }
+.chname { font-size: 13.5px; font-weight: 600; }
+.chmeta { font-size: 12px; color: var(--faint); margin-top: 1px; }
+.chsum {
+  font-size: 12px;
+  color: var(--dim);
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+/* 空态图标：比文字大一号、压到 35% 透明，看起来是「这里还空着」而不是报错 */
+.empty-ic { display: flex; opacity: .35; }
+.empty-ic svg { width: 30px; height: 30px; }
+
+
+/* ==================== 存储 / 维护：表格、滚动区、说明段 ==================== */
+
+/* 卡片内一句说明（替代原来挤在卡片标题行里的灰字） */
+.card-desc { margin: 0 0 14px; font-size: 12.5px; line-height: 1.6; }
+/* 卡片内末尾的一行小注：与内容之间留一段空白，不用内联 margin 补 */
+.card-note { font-size: 12px; color: var(--faint); margin-top: 12px; }
+/* 卡片内分隔线之后的一组动作按钮 */
+.card-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+/* 紧跟说明段落的动作条：上边距由段落的下边距提供，再多一层就空得发虚 */
+.card-acts.top { margin-top: 0; }
+.card-acts .faint-note { font-size: 12.5px; color: var(--faint); }
+/* 卡片内的小节标题（安装包缓存 / 备份文件之类） */
+.card-h4 { font-size: 13px; font-weight: 600; margin: 18px 0 8px; }
+.card-h4:first-of-type { margin-top: 4px; }
+/* 导出区的说明紧贴标题、与下方按钮之间留白 */
+.card-hint { font-size: 12px; color: var(--faint); margin-top: 9px; }
+
+/* 限高滚动区：表头 sticky 时必须有独立滚动容器。
+   overflow-x 显式给 hidden：只写 overflow-y:auto 时，另一个方向会被算成 auto，
+   于是这张表除了竖着滚还能横着拖 —— 而横着拖出去的只是 .table-wrap 的左右留白。 */
+.bscroll { max-height: 300px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+/* .table-wrap 的负边距是给「铺满卡片左右边缘的横向滚动表」用的；
+   套进 .bscroll 这种限高滚动盒里，负边距会把内容顶出盒子一圈：
+   横向多出 16px（能左右滑）、纵向把盒子压矮 16px（最后一行的按钮被切一半）。
+   在滚动盒里取消它，让表格按盒宽自然排。 */
+.bscroll > .table-wrap { margin: 0; padding: 0; }
+/* 存储明细只有几行，不需要 300px 的滚动盒（会把最后一行切成两半），
+   只有视口很矮时才启用滚动。
+   这两个表格本身就可能比卡片宽（路径列很长），横滚要留给里面的 .table-wrap，
+   所以这里把 overflow 整体放开，不做成双向滚动盒。 */
+.bscroll.storage-scroll { max-height: none; overflow: visible; }
+@media (max-height: 900px) {
+  .bscroll.storage-scroll { max-height: 330px; overflow-x: visible; overflow-y: auto; }
+}
+
+/* 表头 sticky：滚动时列名不跟着走；背景色必须显式给，
+   否则下面内容会从表头透出来。 */
+.ttable.tstorage thead th,
+.ttable.tbackup thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 36px;
+  padding-top: 0;
+  padding-bottom: 0;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+/* 备份清单三列：创建时间吃掉剩余宽度、大小定宽、操作定宽。
+   定宽表是为了让行高不随文件名长度浮动 —— 三列都不参与内容协商。 */
+.ttable.tbackup { table-layout: fixed; min-width: 0; }
+.ttable.tbackup tbody td { height: 42px; padding-top: 0; padding-bottom: 0; }
+.ttable.tbackup th:nth-child(2) { width: 100px; }
+.ttable.tbackup th.acts-col,
+.ttable.tbackup td.acts-col { width: 176px; }
+/* max-width:100% 是 text-overflow:ellipsis 生效的前提：单元格默认的
+   min-content 地板等于最长不可断词，不写它省略号不出现，直接把表格撑出去。 */
+.ttable.tbackup .bname { max-width: 100%; }
+
+.ttable.tstorage { table-layout: fixed; min-width: 0; }
+.ttable.tstorage tbody td { height: 46px; padding-top: 0; padding-bottom: 0; }
+/* min-width:0 是路径省略号生效的前提：单元格默认的 min-content 地板
+   等于最长不可断词，而一整条路径就是一个「词」，不写它 text-overflow 无效。 */
+.ttable.tstorage .sname { min-width: 0; }
+.ttable.tstorage .sname .sub { font-size: 11px; margin-top: 2px; color: var(--faint); }
+.ttable.tstorage th.acts-col,
+.ttable.tstorage td.acts-col { text-align: left; }
+.ttable.tstorage td .btn.sm { white-space: nowrap; }
+.ttable.tstorage .chip { height: 20px; padding: 0 7px; font-size: 11px; }
+.ttable.tstorage .chip.err { background: var(--danger-soft); color: var(--danger); }
+
+/* 操作列：左对齐。右对齐会把按钮推到列的最右边缘，
+   与表头（空）之间的间距看起来比其它列大一圈。 */
+.ttable .acts-col { text-align: left; }
+.ttable .acts {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+/* 通用隐藏档位：窄屏收起次要列 */
+@media (max-width: 1140px) { .hide-md { display: none !important; } }
+@media (max-width: 900px) { .hide-sm { display: none !important; } }
+
+/* Jail 表在窄屏保持定宽并给它一个宽度下限，让 .table-wrap 横向滚动。
+   不能改成 table-layout:auto —— 定宽表被压到视口宽时，
+   浏览器会优先满足写了宽度的列，把没写宽度的名称列与操作列压成 0，
+   结果「文字显示不出来」比横向滚动更难受。
+   760px = 960 里去掉窄屏隐藏的接管列（96）与三个参数列（78×3）。 */
+@media (max-width: 900px) {
+  /* 选择器逐个写成 table.fixed.jail-table：.table-wrap table.fixed 那条
+     （min-width:0）在 ≤720px 断点里，特异性比 .table-wrap table.jail-table 高，
+     少了 .fixed 这一层就会被它盖掉，横向滚动不会出现。 */
+  .table-wrap table.fixed.jail-table { min-width: 760px; }
+}
+
+/* 手机端：路径行把省略号挪到前面，保住尾部的文件名 */
+@media (max-width: 720px) {
+  .ttable.tstorage th, .ttable.tstorage td { padding-left: 8px; padding-right: 8px; }
+  .ttable.tstorage tbody td { height: 42px; }
+  .ttable.tstorage thead th { height: 32px; font-size: 12px; }
+  .ttable.tstorage .sname .sub {
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    /* direction:rtl 让省略号出现在行首，长路径的尾巴才看得见；
+       text-align:left 让文字本身仍按 LTR 排。 */
+    direction: rtl;
+    text-align: left;
+  }
+  /* 备份清单：窄屏收起「大小」列，把宽度留给时间与两个按钮 */
+  .ttable.tbackup th:nth-child(2),
+  .ttable.tbackup td:nth-child(2) { display: none; }
+  .ttable.tbackup th.acts-col,
+  .ttable.tbackup td.acts-col { width: 140px; }
+}
+
+/* 维护页的自动备份表单：两列网格，字段间距与卡片内其它块一致 */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 14px;
+}
+.form-grid .field.full { grid-column: 1 / -1; }
+@media (max-width: 720px) {
+  .form-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+
+
+@media (max-width: 720px) {
+  .seg { overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+  .seg::-webkit-scrollbar { display: none; }
+  /* 日志行在窄屏换上下两行：时间一行、消息一行。
+     消息允许任意断词，长 URL 与 jail 名不会把整行顶出屏幕。 */
+  .logline { flex-direction: column; gap: 2px; padding: 8px 12px; }
+  .logline .t { min-width: 0; font-size: 11px; }
+  .logline .m { word-break: break-word; overflow-wrap: anywhere; }
+}
+
