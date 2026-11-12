@@ -890,11 +890,15 @@
       t('dash.serviceTitleInline') +
       '<dl class="kv">' +
       kv(t('notify.colStatus'), info.installed
-        ? '<span class="badge ' + (info.running ? 'ok' : 'danger') + '">' +
+        ? '<span class="badge ' + (info.running ? 'ok' : 'warn') + '">' +
           (info.running ? t('jail.scopeActive') : t('jail.noneRunning')) + '</span>'
         : t('dash.badgeNotInstalled')) +
       kv('systemd', esc(svcState.raw || '—')) +
-      kv(t('dash.autostart'), svcState.enabled ? t('jail.scopeEnabled') : t('notify.pollDisabled')) +
+      // 键值清单里的状态统一走徽章：正常=绿、异常/未就绪=橙、无从判断=灰。
+      // 之前「开机自启」直接输出纯文本，同一张卡里一半是彩字一半是黑字，看不出哪个是状态。
+      kv(t('dash.autostart'), svcState.enabled
+        ? '<span class="badge ok">' + t('jail.scopeEnabled') + '</span>'
+        : '<span class="badge warn">' + t('notify.pollDisabled') + '</span>') +
       kv(t('dash.version'), esc(info.version || '—')) +
       kv(t('dash.socket'), '<span class="mono">' + esc(info.socket || '—') + '</span>') +
       kv(t('dash.client'), '<span class="mono">' + esc(info.client || '—') + '</span>') +
@@ -1597,7 +1601,7 @@
         jails.map(function (item) {
           return kv(item.name, item.ok
             ? t('unit.count', { n: String(item.count) })
-            : ("<span class=\"badge danger\">" + t('err.loadFailed') + "</span> <span class=\"hint\">") +
+            : ("<span class=\"badge warn\">" + t('err.loadFailed') + "</span> <span class=\"hint\">") +
               esc(item.error || '') + '</span>');
         }).join('') +
         ("</dl><div class=\"help\">" + t('ban.perJailHelp') + "</div></div>");
@@ -2823,8 +2827,11 @@
           ? t('notify.badgeRunning')
           : t('notify.badgeStopped'))
         : t('dash.badgeNotInstalled')) +
+      // 「未启用」是未就绪态，与「无响应」同色；已启用时这一格是「每 N 秒」，
+      // 那是数字说明而不是状态词，保持普通文字。
       kv(t('notify.pollState'), s.enabled || s.browserNotify
-        ? t('notify.pollEvery', { n: s.pollInterval }) : t('notify.pollDisabled')) +
+        ? t('notify.pollEvery', { n: s.pollInterval })
+        : '<span class="badge warn">' + t('notify.pollDisabled') + '</span>') +
       '</dl></div>';
 
     // 通知渠道：标题与「添加渠道」在手机上也同一行（.ch-inline）。
@@ -4155,17 +4162,20 @@
       kv(t('fnk.effNow'), '<span class="mono">' +
         esc(ba.effectiveBanaction || t('fnk.inheritedDefault')) + '</span>') +
       kv(t('fnk.inheritedAction'), '<span class="mono">' + esc(ba.inheritedBanaction || '—') + '</span>') +
+      // fnk.badgeInstalled / badgeNotInstalled / badgeNotJoined 的词条里自带
+      // <span class="badge …">，这里不能再包一层 —— 套两层时外层的类会把内层
+      // 的颜色压掉，改了内层也看不出变化。
       kv(t('fnk.actionFile'), ba.actionInstalled
-        ? '<span class="badge ok">' + t('fnk.badgeInstalled') + '</span>'
-        : '<span class="badge muted">' + t('fnk.badgeNotInstalled') + '</span>') +
+        ? t('fnk.badgeInstalled')
+        : t('fnk.badgeNotInstalled')) +
       kv(t('fnk.filterRow'), g.filterInstalled
         ? '<span class="badge ok">' + t('common.installed') + '</span> <span class="mono">' +
           esc(g.filterName) + '.local</span>'
-        : '<span class="badge muted">' + t('fnk.badgeNotInstalled') + '</span>') +
+        : t('fnk.badgeNotInstalled')) +
       kv(t('fnk.jailRow'), g.jailInstalled
         ? '<span class="badge ok">' + t('fnk.joined') + '</span> <span class="mono">' +
           esc(g.jailName) + '</span> <span class="hint">' + esc(g.logPath) + '</span>'
-        : '<span class="badge muted">' + t('fnk.badgeNotJoined') + '</span>') +
+        : t('fnk.badgeNotJoined')) +
       kv(t('fnk.ignoreRow'), g.jailInstalled && g.ignoreip
         ? '<span class="mono">' + esc(g.ignoreip) + '</span>'
         : '<span class="badge muted">—</span>') +
@@ -4241,22 +4251,23 @@
   function fnkStatusPanel(data, s, detected, f2bState, pollInterval) {
     return '<div class="card">' + cardHead(t('fnk.probeTitle')) +
       '<dl class="kv">' +
+      // 同样是词条自带徽章的写法：外层不再包 <span class="badge …">。
       kv(t('fnk.installState'), detected.installed
-        ? '<span class="badge ok">' + t('fnk.badgeInstalled') + '</span>'
-        : '<span class="badge muted">' + t('fnk.badgeNotDetected') + '</span>') +
+        ? t('fnk.badgeInstalled')
+        : t('fnk.badgeNotDetected')) +
       kv(t('fnk.varDir'), '<span class="mono">' + esc(detected.varDir || '—') + '</span>') +
       kv(t('fnk.backend'), detected.running
         ? '<span class="badge ok">' + t('fnk.listening') + '</span> <span class="mono">127.0.0.1:' +
           esc(detected.port) + '</span>'
-        : '<span class="badge muted">' + t('fnk.badgeNoResponse') + '</span>') +
+        : t('fnk.badgeNoResponse')) +
       kv(t('fnk.localSecret'), detected.secretFound
-        ? '<span class="badge ok">' + t('fnk.badgeReadable') + '</span>'
-        : '<span class="badge muted">' + t('fnk.badgeNotFound') + '</span>') +
+        ? t('fnk.badgeReadable')
+        : t('fnk.badgeNotFound')) +
       kv('fail2ban', f2bState.installed
         ? (f2bState.running
-          ? '<span class="badge ok">' + t('notify.badgeRunning') + '</span>'
-          : '<span class="badge muted">' + t('notify.badgeStopped') + '</span>')
-        : '<span class="badge muted">' + t('dash.badgeNotInstalled') + '</span>') +
+          ? t('notify.badgeRunning')
+          : t('notify.badgeStopped'))
+        : t('dash.badgeNotInstalled')) +
       kv(t('fnk.pollIntervalRow'), esc(t('fnk.pollIntervalValue', { n: pollInterval }))) +
       '</dl>' +
       cardFoot('<button class="btn" data-act="fnk-test">' + t('common.testConnection') + '</button>') +
