@@ -1546,13 +1546,24 @@ details.raw pre {
 /* 卡片本身当滚动容器：列表贴着圆角内边距滚，不给它单独一层边框 */
 .card.flush { padding: 0; overflow: hidden; }
 
-/* 日志区：固定露出最新的 10 条，更早的记录在卡片内滚。
+/* 日志区：固定露出最新的若干行（桌面 15 行），更早的记录在卡片内滚。
    高度不写死在 CSS 里 —— 一条记录在桌面占一行、在窄屏占两行，
    同一条消息换行与否也会差一行，写死像素数就会一会儿 8 条一会儿 12 条。
-   由脚本按前 10 行实测高度定高（见 app.js 的 fitLogView）。
+   由脚本按前 N 行实测高度定高（见 app.js 的 fitLogView）。
    选择器连 .card.flush 一起写：那条规则带了 overflow:hidden，
    单写 .log-view 拼不过它的权重，滚不起来。 */
-.card.flush.log-view { overflow: auto; }
+.card.flush.log-view {
+  overflow: auto;
+  /* 列表与卡片上下的留白：首尾两条直接贴着圆角与边框时，滚到底的最后一行
+     看着像被切了一半。只加纵向 —— 横向要留给行分隔线通栏铺开。
+     纵向 16px 与卡片自身的内边距同档，日志列表因此和别的卡片一样不贴边。
+
+     上方留白用容器 padding-bottom 会露出下一行 —— padding 区不裁剪内容，
+     第 16 行会顶进那 16px 里露出一条边。所以上方用 padding、下方用末行的
+     margin：margin 区域永远没有内容，滚到顶时它就是干净的空白。 */
+  padding: 16px 0 0;
+}
+.log-view .logline:last-child { margin-bottom: 16px; }
 
 /* ---------------------------------------------------------- 日志页工具栏 --- */
 

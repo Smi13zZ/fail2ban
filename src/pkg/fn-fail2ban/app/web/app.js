@@ -2374,6 +2374,21 @@
     return setSection(t('set.backupHint'), renderBackupCard());
   }
 
+  /* 原版应用的作者与项目地址。放在这里而不是写进 manifest ——
+     manifest 里的 maintainer 是本应用的维护者，两者不是一回事。
+     原版包里 maintainer_url 只是占位符 https://github.com/，没有真实地址，
+     所以这一行的链接需要明确来源，不能凭名字去猜一个主页。 */
+  var ORIGINAL_AUTHOR_NAME = 'LemonCrab';
+  // 原版包里 maintainer_url 只有占位符 https://github.com/，没有真实地址。
+  // 拿到确切地址后填在这里；留空则「关于」里只显示名字、不生成链接。
+  var ORIGINAL_AUTHOR_URL = '';
+
+  function originalAuthorHtml() {
+    if (!ORIGINAL_AUTHOR_URL) return esc(ORIGINAL_AUTHOR_NAME);
+    return '<a class="mono" href="' + esc(ORIGINAL_AUTHOR_URL) +
+      '" target="_blank" rel="noopener noreferrer">' + esc(ORIGINAL_AUTHOR_NAME) + '</a>';
+  }
+
   function renderSetAbout() {
     var meta = state.meta || {};
     var app = meta.app || {};
@@ -2389,6 +2404,10 @@
       kv(t('set.aboutPorts'), '<span class="mono">' + esc(app.port || '—') + '</span>') +
       kv(t('set.aboutRepo'), '<a class="mono" href="' + esc(repo) +
         '" target="_blank" rel="noopener noreferrer">Smi13zZ/fail2ban</a>') +
+      // 原作者一行：这个面板是在原版「Fail2ban 防护」基础上重做的界面，
+      // 原项目的名字与地址在这里留个出处。地址为空时只显示名字 ——
+      // 宁可少一个链接，也不拿一个猜出来的主页凑数。
+      kv(t('set.aboutOriginal'), originalAuthorHtml()) +
       kv(t('set.aboutLicense'), 'MIT') +
       '</dl>' +
       '<div class="help">' + esc(t('set.aboutHint')) + '</div>' +
@@ -3925,33 +3944,50 @@
       '</span></div>';
   }
 
-  // 日志区固定露出最新的 10 条，更早的在卡片内滚。
+  // 日志区固定露出最新的若干条，更早的在卡片内滚。
   // 高度不能写死在 CSS 里：一条记录在桌面占一行、在窄屏占两行，
   // 消息本身换行与否也差一行，写死像素数就会出现「一会儿 8 条一会儿 12 条」。
-  // 这里清掉上限、按前 10 行的实测高度重新定高，两种版式都对得上。
-  var LOG_VISIBLE_ROWS = 10;
+  // 这里清掉上限、按前 N 行的实测高度重新定高，两种版式都对得上。
+  // 桌面端一屏放得下 15 行（1440×900 下卡片顶部约 120px，15 行约 455px）；
+  // 手机端一行折成两行占 75px，同样条数要 1100px 以上，屏幕装不下，
+  // 所以窄屏仍按 10 条算，再交给下面的可视高度收口。
+  var LOG_ROWS_WIDE = 15;
+  var LOG_ROWS_NARROW = 10;
   // 卡片底下留出的余量：最后一条不贴着屏幕底边
   var LOG_VIEW_GUTTER = 14;
+
+  function logVisibleRows() {
+    // 与 CSS 的 720px 断点保持一致：那条断点里日志行才改成上下两行
+    return window.matchMedia && window.matchMedia('(max-width: 720px)').matches
+      ? LOG_ROWS_NARROW : LOG_ROWS_WIDE;
+  }
 
   function fitLogView(box) {
     if (!box) return;
     // 先撤掉上一次的上限：内容还被压着的话，量出来的行高是被截断后的
     box.style.maxHeight = 'none';
     var rows = box.querySelectorAll('.logline');
-    if (rows.length <= LOG_VISIBLE_ROWS) return;   // 不够 10 条就整块摊开，不出滚动条
+    var visible = logVisibleRows();
+    if (rows.length <= visible) return;   // 不够这么多条就整块摊开，不出滚动条
 
     var boxTop = box.getBoundingClientRect().top;
-    // 卡片 padding 为 0，第 10 条的底边减卡片顶边就是这 10 条的实际高度
-    var tenth = Math.ceil(rows[LOG_VISIBLE_ROWS - 1].getBoundingClientRect().bottom - boxTop);
-    // 10 行不一定放得下：窄屏一条记录占两行，10 条能有 750px，比剩下的屏幕还高。
+    // 第 N 条的底边减卡片顶边 = 上内边距 + 这 N 行的实际高度。
+    // 卡片自己有上下 16px 内边距（.log-view 的 padding），max-height 按
+    // border-box 算，如果不把下内边距加回来，最后一行会被那 16px 挤出去 ——
+    // 桌面端 15 行会变成「14 行 + 半截第 15 行」。
+    // 只算「卡片顶边到第 N 条底边」：这段里已经含了卡片的上内边距。
+    // 下方的留白不参与计算 —— 它是内容（末行的 margin-bottom），
+    // 加进来会让可视区多出一段，正好露出第 N+1 行的一条边。
+    var nth = Math.ceil(rows[visible - 1].getBoundingClientRect().bottom - boxTop);
+    // 这么多行不一定放得下：窄屏一条记录占两行，10 条能有 750px，比剩下的屏幕还高。
     // 这时按剩余可视高度收 —— 宁可少露一两条，也不让日志卡把页面顶出整页滚动
     // （页面滚动 + 卡片内滚动两层叠在一起，翻起来会互相抢手势）。
     var room = Math.floor(window.innerHeight - boxTop - LOG_VIEW_GUTTER);
-    var target = Math.max(120, Math.min(tenth, room));
+    var target = Math.max(120, Math.min(nth, room));
     box.style.maxHeight = target + 'px';
 
     // 页脚留白、卡片间距这些不好在脚本里一项项算，直接量页面实际溢出多少再收回来。
-    // 只收不涨：本来就没溢出（桌面）时这一步碰都不碰，10 行保持原样。
+    // 只收不涨：本来就没溢出（桌面）时这一步碰都不碰，15 行保持原样。
     var over = document.documentElement.scrollHeight - window.innerHeight;
     if (over > 0) target = Math.max(120, target - over - 2);
 
@@ -3961,14 +3997,16 @@
   }
 
   // 把高度上限收成「能完整放下的最后一行」的底边，不切半行。
-  // 行高是 30.2px 这类小数，界面上取不到整像素：向上取整会多留半个像素，
-  // 正好把下一条的顶边露成一线；所以这里向下取整，宁可把最后一条的底边
-  // 压掉不到 1px（看不出来），也不让下一行露头。
+  // 行高是 30.2px 这类小数，界面上取不到整像素：向下取整会把最后一行压掉
+  // 不到 1px（第 15 行量出来只有 29.4/30.2，看着总像差一点），所以向上取整。
+  // 多出的不到 1px 落在下一行的上内边距里 —— 那里没有文字也没有分隔线，
+  // 只有卡片底色，看不出来。
   // limit 连第一行都放不下时原样返回，交给上层的最小值兜底。
   function snapToRow(rows, boxTop, limit) {
     var fit = 0;
-    for (var i = 0; i < rows.length && i < LOG_VISIBLE_ROWS; i++) {
-      var bottom = Math.floor(rows[i].getBoundingClientRect().bottom - boxTop);
+    var cap = Math.max(LOG_ROWS_WIDE, LOG_ROWS_NARROW);
+    for (var i = 0; i < rows.length && i < cap; i++) {
+      var bottom = Math.ceil(rows[i].getBoundingClientRect().bottom - boxTop);
       if (bottom > limit) break;
       fit = bottom;
     }
