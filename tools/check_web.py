@@ -289,6 +289,50 @@ def check_block_close_suffix(report, app_js=None, i18n=None):
         print("  闭合标签词条用在了正确的位置：%d 个带 </div> 的词条未在行内拼接" % len(risky))
 
 
+def check_escaped_markup(report, app_js=None, i18n=None):
+    """被 esc() 转义的词条，译文里不该带任何 HTML 标签。
+
+    26.11.36 踩过：`fnk.instantHelp2` 的译文末尾挂着一个 `</div>`。
+    调用处确实用了 `esc(t(...))`，所以容器没被提前闭合 —— 但 esc() 只是把
+    `<` 换成 `&lt;`，于是那串 `</div>` 原样印在界面上，用户看到的是
+    「……不需要等巡检。</div>」。
+
+    check_block_close_suffix 管的是「带尾标签的词条被当行内片段拼接」，
+    这一条管的是另一半：**被转义的词条本来就是纯文本，带标签一定是写错了**。
+    两者互补，缺一个就会漏。
+    """
+    i18n = i18n or I18N
+    app_js = app_js or APP_JS
+    if not os.path.isfile(i18n) or not os.path.isfile(app_js):
+        return
+    src = G.read_text(i18n)
+    # 值里带任何 HTML 标签的词条
+    with_tags = {}
+    for m in re.finditer(r'^\s{4}"((?:[^"\\]|\\.)*)"\s*:\s*"((?:[^"\\]|\\.)*)"', src, re.M):
+        key, value = m.group(1), m.group(2)
+        if re.search(r"</?[a-zA-Z][^>]*>", value):
+            with_tags[key] = value
+
+    if not with_tags:
+        print("  转义词条带标签：0 个")
+        return
+
+    app = G.read_text(app_js)
+    hits = []
+    for key, value in with_tags.items():
+        pattern = re.compile(r"esc\(\s*t\('" + re.escape(key) + r"'\)\s*\)")
+        for m in pattern.finditer(app):
+            line_no = app.count("\n", 0, m.start()) + 1
+            hits.append((line_no, key, value[-46:]))
+
+    for line_no, key, tail in hits:
+        report.fail("%s:%d" % (G.rel(app_js), line_no),
+                    "%r 的译文含 HTML 标签却被 esc() 转义输出，标签会原样印在界面上："
+                    "…%s —— 纯文本词条不应带标签" % (key, tail))
+    if not hits:
+        print("  转义词条未带标签：%d 个含标签的词条都不是 esc() 输出" % len(with_tags))
+
+
 def main(argv=None):
     G.setup_stdio()
     argv = sys.argv[1:] if argv is None else argv
@@ -296,13 +340,17 @@ def main(argv=None):
     #   python tools/check_web.py <app.js> <index.html>
     app_js = os.path.abspath(argv[0]) if len(argv) > 0 else APP_JS
     index = os.path.abspath(argv[1]) if len(argv) > 1 else INDEX
+    # 字典也允许指向副本（变异测试用）：python tools/check_web.py app.js index.html
+    # 只覆盖了前两个，字典仍是仓库那份的话，针对字典的检查永远绿。
+    i18n = os.path.abspath(os.environ.get("F2B_I18N") or I18N)
     report = G.Report("前端检查")
     js_syntax(report, G.find_node())
     reverse_tables(report)
     check_page_assembly(report, index)
     inline_spacing_patches(report, app_js, index)
     # 传 app_js：变异测试时要在副本上跑，不能永远读仓库里那份
-    check_block_close_suffix(report, app_js)
+    check_block_close_suffix(report, app_js, i18n)
+    check_escaped_markup(report, app_js, i18n)
     return report.finish()
 
 

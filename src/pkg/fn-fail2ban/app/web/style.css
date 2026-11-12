@@ -2642,6 +2642,24 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
   /* 动作条换行：主要按钮独占一行撑满，次要按钮排在它上面靠右 */
   .card-foot { flex-wrap: wrap; }
   .card-foot .btn.primary { flex: 1 1 100%; }
+
+  /* 三颗等宽按钮排成一行（fn-knock「手动处理」那三颗）。
+     只在中文界面启用：中文标签最长 8 个字，均分后每颗 109px 放得下；
+     英文标签最长 27 个字符要 137px，同样宽度会被截成省略号，
+     所以英文维持上面的折行排布，不硬塞。
+     语言由 <html lang> 标记（zh-CN / en），用它当条件最省事。 */
+  html:lang(zh) .card-foot.foot-3 {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+  html:lang(zh) .card-foot.foot-3 .spacer { display: none; }
+  html:lang(zh) .card-foot.foot-3 .btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0 6px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
 }
 
 /* ============================================= 26.11.18 说明页 / 手机选择器 ==== */
