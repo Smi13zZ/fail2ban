@@ -941,6 +941,20 @@ table.fixed td.c-filter { text-overflow: ellipsis; }
 
 .ban-table.wide { min-width: 880px; }
 
+/* 黑名单表：IP 180 + 操作 140 已经吃掉 320px，窄屏上表格只剩 340px 时，
+   剩下「来源 / 备注 / 到期」三列各被压到 7px —— 表头与内容一起消失，
+   行高还被撑到 500px 以上。定宽表被压到视口宽时，浏览器会优先满足
+   写了宽度的列，把没写宽度的列压成 0，这比横向滚动难受得多。
+   所以给一个能装下五列内容的最小宽度，超出部分在 .table-wrap 里横向滚动。
+   宽度写在 ≤900px 断点里、且选择器带上 .fixed：.table-wrap table.fixed
+   那条 min-width:0 的特异性更高，少了这两层会被它盖掉。 */
+.fnk-table .c-source { width: 200px; }
+.fnk-table .c-note { width: 240px; }
+.fnk-table .c-exp { width: 150px; }
+@media (max-width: 900px) {
+  .table-wrap table.fixed.fnk-table { min-width: 740px; }
+}
+
 /* 卡片标题右侧的弹性空隙，把排序控件推到最右 */
 .h3-grow { flex: 1 1 auto; }
 
