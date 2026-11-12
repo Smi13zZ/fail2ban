@@ -1294,6 +1294,25 @@ td .cell-actions .btn.danger:hover {
   overflow-wrap: anywhere;
 }
 .ip-row .btn { flex: 0 0 auto; }
+/* 编辑中的那一行：输入框吃剩余宽度，保存 / 取消按内容宽。
+   输入框沿用全局的 .input 高度，与两侧按钮齐平。 */
+.ip-row-edit { background: var(--muted); }
+.ip-row-edit .ip-edit {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.ip-row-edit .ip-edit:focus {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 22%, transparent);
+}
 
 /* 输入框 + 添加按钮这一行：输入框吃掉剩余宽度、按钮按内容宽。
    少了 min-width:0 时输入框会按自身固有宽度占位（约 166px），
