@@ -3120,8 +3120,11 @@
     var backupEst = storageEstimateText('backups');
     var allEst = storageEstimateText('all');
 
+    // ch-inline：窄屏默认是「标题独占整行、动作换到下一行」，这里只有一个刷新按钮，
+    // 照那条走会白占一整行，按钮落到标题下面也像是在操作整页。
     var html = '<div class="card">' + cardHead(t('stor.usageTitle'),
-      '<button class="btn sm" data-act="storage-refresh">' + t('common.refresh') + '</button>') +
+      '<button class="btn sm" data-act="storage-refresh">' + t('common.refresh') + '</button>',
+      'ch-inline') +
       '<p class="dim card-desc">' + esc(t('stor.hint')) + '</p>';
 
     // 合计条：标签 / 数值 / 目录三段同一行基线对齐
