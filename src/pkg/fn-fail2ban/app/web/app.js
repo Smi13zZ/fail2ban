@@ -2728,7 +2728,14 @@
     var items = payload.items || [];
     // 卡片头一行放「标题 → 筛选分段 → 刷新 → 清空」：四个都在同一条 flex 上，
     // 筛选不再单独占一行，刷新与清空也不再掉到卡片底部去。
+    // 卡片头：「投递记录 …… 刷新 / 清空记录」同行（.ch-inline）。
+    // 筛选分段单独一行放在下面：三个按钮加两个动作按钮挤在 390px 的一行里
+    // 会被压成短短几截，标题也因此被挤到第二行去。
     var html = '<div class="card">' + cardHead(t('notify.delivTitle'),
+      '<button class="btn sm" data-act="deliv-refresh">' + t('common.refresh') + '</button>' +
+      '<button class="btn sm danger" data-act="deliv-clear">' + t('notify.delivClear') + '</button>',
+      'ch-inline') +
+      '<div class="deliv-bar">' +
       '<div class="seg">' +
       [['all', 'notify.delivFilterAll'], ['ok', 'notify.delivFilterOk'], ['fail', 'notify.delivFilterFail']]
         .map(function (pair) {
@@ -2736,9 +2743,7 @@
             (state.deliv.status === pair[0] ? ' class="on"' : '') + '>' +
             t(pair[1]) + '</button>';
         }).join('') +
-      '</div>' +
-      '<button class="btn sm" data-act="deliv-refresh">' + t('common.refresh') + '</button>' +
-      '<button class="btn sm danger" data-act="deliv-clear">' + t('notify.delivClear') + '</button>') +
+      '</div></div>' +
       '<p class="dim card-desc">' + esc(t('notify.delivHint')) +
       (payload.kept ? ' ' + esc(t('notify.delivKept', { n: payload.kept })) : '') +
       '</p>';
@@ -2822,14 +2827,16 @@
         ? t('notify.pollEvery', { n: s.pollInterval }) : t('notify.pollDisabled')) +
       '</dl></div>';
 
-    // 通知渠道
+    // 通知渠道：标题与「添加渠道」在手机上也同一行（.ch-inline）。
+    // 支持哪些类型这句说明统一放到卡片底部，空态只留图标 + 一句「还没有配置」，
+    // 原先的空态里塞了半句、底部再塞后半句，中间隔着整片空白。
     html += '<div class="card">' + cardHead(t('notify.channelsTitle'),
       '<button class="btn sm primary" data-act="channel-new">' +
-      t('notify.addChannel') + '</button>');
+      t('notify.addChannel') + '</button>', 'ch-inline');
     if (!s.channels.length) {
-      html += '<div class="empty">' +
+      html += '<div class="empty channels-empty">' +
         '<span class="empty-ic">' + BELL_ICON + '</span>' +
-        esc(t('notify.channelsEmpty1')) +
+        esc(t('notify.channelsEmptyShort')) +
         '</div>';
     } else {
       html += '<div class="chlist">';
@@ -2854,7 +2861,7 @@
       });
       html += '</div>';
     }
-    html += '<div class="card-note">' + t('notify.channelsEmpty2') + '</div>' +
+    html += '<div class="card-note">' + esc(t('notify.channelsSupported')) + '</div>' +
       '</div>';
 
     // 投递记录

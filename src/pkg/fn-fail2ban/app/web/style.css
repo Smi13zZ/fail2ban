@@ -2063,6 +2063,15 @@ details.raw pre {
   color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
+/* 投递记录的筛选分段单独一行：三个筛选 + 刷新 + 清空共五个控件挤在
+   390px 的一行里会被压成短短几截，标题也会被挤到第二行去。 */
+.deliv-bar { margin-bottom: 10px; }
+.deliv-bar .seg { display: inline-flex; }
+
+/* 通知渠道的空态：图标 + 一句「还没有配置」，上下各留 22px。
+   .empty 默认 32px 上下内边距，在这样一张底部还要接说明的卡片里显得太松。 */
+.channels-empty { padding: 22px 16px; gap: 10px; }
+
 .deliv-list {
   display: flex;
   flex-direction: column;
