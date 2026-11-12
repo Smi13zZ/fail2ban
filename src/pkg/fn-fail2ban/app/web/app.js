@@ -735,7 +735,7 @@
 
   function setView(view, tab) {
     state.view = view;
-    if (view !== 'logs') stopLogTimer();
+    if (view !== 'logs') { stopLogTimer(); stopLogFit(); }
     if (view !== 'dashboard') stopAutoRefresh();
     if (view === 'settings') {
       state.setTab = SET_TABS.indexOf(tab) >= 0 ? tab : (state.setTab || 'panel');
@@ -3795,6 +3795,16 @@
   /* -------------------------------------------------------------- 日志 */
 
   var logTimer = null;
+  // 日志区定高的 resize 监听：换页要摘掉，否则离开日志页后每次转屏
+  // 都会白跑一次（查不到卡片就直接返回，但监听器会一直挂着）
+  var logFitHandler = null;
+
+  function stopLogFit() {
+    if (logFitHandler) {
+      window.removeEventListener('resize', logFitHandler);
+      logFitHandler = null;
+    }
+  }
 
   function stopLogTimer() {
     if (logTimer) { clearInterval(logTimer); logTimer = null; }
@@ -3887,6 +3897,56 @@
       '</span></div>';
   }
 
+  // 日志区固定露出最新的 10 条，更早的在卡片内滚。
+  // 高度不能写死在 CSS 里：一条记录在桌面占一行、在窄屏占两行，
+  // 消息本身换行与否也差一行，写死像素数就会出现「一会儿 8 条一会儿 12 条」。
+  // 这里清掉上限、按前 10 行的实测高度重新定高，两种版式都对得上。
+  var LOG_VISIBLE_ROWS = 10;
+  // 卡片底下留出的余量：最后一条不贴着屏幕底边
+  var LOG_VIEW_GUTTER = 14;
+
+  function fitLogView(box) {
+    if (!box) return;
+    // 先撤掉上一次的上限：内容还被压着的话，量出来的行高是被截断后的
+    box.style.maxHeight = 'none';
+    var rows = box.querySelectorAll('.logline');
+    if (rows.length <= LOG_VISIBLE_ROWS) return;   // 不够 10 条就整块摊开，不出滚动条
+
+    var boxTop = box.getBoundingClientRect().top;
+    // 卡片 padding 为 0，第 10 条的底边减卡片顶边就是这 10 条的实际高度
+    var tenth = Math.ceil(rows[LOG_VISIBLE_ROWS - 1].getBoundingClientRect().bottom - boxTop);
+    // 10 行不一定放得下：窄屏一条记录占两行，10 条能有 750px，比剩下的屏幕还高。
+    // 这时按剩余可视高度收 —— 宁可少露一两条，也不让日志卡把页面顶出整页滚动
+    // （页面滚动 + 卡片内滚动两层叠在一起，翻起来会互相抢手势）。
+    var room = Math.floor(window.innerHeight - boxTop - LOG_VIEW_GUTTER);
+    var target = Math.max(120, Math.min(tenth, room));
+    box.style.maxHeight = target + 'px';
+
+    // 页脚留白、卡片间距这些不好在脚本里一项项算，直接量页面实际溢出多少再收回来。
+    // 只收不涨：本来就没溢出（桌面）时这一步碰都不碰，10 行保持原样。
+    var over = document.documentElement.scrollHeight - window.innerHeight;
+    if (over > 0) target = Math.max(120, target - over - 2);
+
+    // 收完的高度多半落在某一行中间，露出半截记录比少露一条更难看。
+    // 最后一步对齐到整行边界：只保留完整装得下的行。
+    box.style.maxHeight = snapToRow(rows, boxTop, target) + 'px';
+  }
+
+  // 把高度上限收成「能完整放下的最后一行」的底边，不切半行。
+  // 行高是 30.2px 这类小数，界面上取不到整像素：向上取整会多留半个像素，
+  // 正好把下一条的顶边露成一线；所以这里向下取整，宁可把最后一条的底边
+  // 压掉不到 1px（看不出来），也不让下一行露头。
+  // limit 连第一行都放不下时原样返回，交给上层的最小值兜底。
+  function snapToRow(rows, boxTop, limit) {
+    var fit = 0;
+    for (var i = 0; i < rows.length && i < LOG_VISIBLE_ROWS; i++) {
+      var bottom = Math.floor(rows[i].getBoundingClientRect().bottom - boxTop);
+      if (bottom > limit) break;
+      fit = bottom;
+    }
+    return fit || Math.max(120, limit);
+  }
+
   // resetScroll：筛选条件变了就回到顶部 —— 那是一次全新的查询，
   // 沿用上一次的滚动位置会落在毫不相干的地方。自动刷新不走这条路。
   function renderLogs(resetScroll) {
@@ -3929,7 +3989,8 @@
     var keepTop = (prevBox && !resetScroll) ? prevBox.scrollTop : 0;
     var keepHeight = (prevBox && !resetScroll) ? prevBox.scrollHeight : 0;
 
-    html += '<div class="card flush" style="max-height:72vh;overflow:auto">';
+    // 高度上限由 .log-view 定（10 行）；超出的滚动画布由卡片自己承担
+    html += '<div class="card flush log-view">';
     if (!data) {
       html += '<div class="empty">' + t('fnk.loadingInline') + '</div>';
     } else if (data.error) {
@@ -3946,10 +4007,23 @@
     host.innerHTML = html;
     var box = $('.card.flush', host);
     if (box) {
+      // 先按新的行高定好可视高度，再补滚动位置：定高会改变 scrollTop 的可取值，
+      // 顺序反了会让"补回去"的那一像素数落在被夹住的位置上
+      fitLogView(box);
       // 本来就停在最上面：跟着最新的一行走，不往回缩
       if (keepTop <= 4) box.scrollTop = 0;
       // 停在中间：新行顶进来多少就往下让多少，正在读的那几行留在原地
       else if (keepHeight) box.scrollTop = keepTop + (box.scrollHeight - keepHeight);
+      // 视口宽度变了（转屏 / 拉窗口），一条记录占一行还是两行就变了，
+      // 定好的高度要跟着重算，否则会露出 6 条或 12 条
+      if (logFitHandler) {
+        window.removeEventListener('resize', logFitHandler);
+      }
+      logFitHandler = function () {
+        var live = $('.card.flush.log-view', $('#view'));
+        if (live) fitLogView(live);
+      };
+      window.addEventListener('resize', logFitHandler);
     }
 
     if (state.logOpts.auto && !logTimer) {
