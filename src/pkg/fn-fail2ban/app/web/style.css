@@ -1755,7 +1755,7 @@ details.raw pre {
     left: 0;
     top: 0;
     bottom: 0;
-    width: 236px;
+    width: 216px;
     flex: none;
     height: 100vh;
     transform: translateX(-100%);
@@ -1791,18 +1791,16 @@ details.raw pre {
     padding: 10px 12px;
     min-height: 52px;
     flex-wrap: nowrap;
-    gap: 8px;
+    gap: 10px;
   }
   /* 标题与徽章之间的弹性空隙在单行布局里是多余的：标题自己就是弹性项，
      再留一个 flex:1 的空隙会把可用宽度对半分，标题提前变成省略号。 */
   .topbar > .spacer { display: none; }
-  /* 菜单键去掉描边与底色，只留三条线：它左边就是屏幕边缘，
-     再套一圈边框会显得像被推挤出来的第二个按钮。 */
+  /* 菜单键去掉描边与底色，只留三条线，尺寸与其余图标按钮一致。 */
   .topbar #menuToggle {
-    width: 36px;
-    height: 36px;
-    flex-basis: 36px;
-    margin-left: -6px;
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
     border-color: transparent;
     background: transparent;
     color: var(--text);
@@ -1822,24 +1820,36 @@ details.raw pre {
     gap: 6px;
   }
   .topbar .tools .btn { height: 34px; padding: 0 10px; }
-  /* 状态徽章收成一个圆点：窄屏没有放「运行中 / 已停止」这几个字的位置，
-     颜色本身已经说明状态（绿=运行、橙=停止、红=未安装）。只收掉文字那层，
-     圆点保留，徽章退化成与右侧按钮同尺寸的圆形状态灯。 */
-  .topbar .badge {
-    width: 34px;
-    height: 34px;
-    flex: 0 0 34px;
+  /* 状态徽章收成一个纯状态点：高度保持一整行控件的高度，宽度只包住那颗点。
+     它只是「服务还活着吗」的提示，厚度一旦追上右侧的按钮，就会被读成一个
+     可点的操作，视觉重心也跟着跑偏。只收掉文字那层，圆点保留。
+
+     底色一律走中性灰，颜色只由圆点承担。整块染成状态色的圆盘比中性药丸
+     + 一颗小点的视觉重量大得多——同样的 24px 宽，前者看起来像按钮，
+     后者才是状态灯。 */
+  .topbar .badge,
+  .topbar .badge.ok,
+  .topbar .badge.warn,
+  .topbar .badge.danger {
+    width: 24px;
+    height: 26px;
+    flex: 0 0 24px;
     justify-content: center;
     gap: 0;
     padding: 0;
-    border-radius: 50%;
+    border-radius: 999px;
+    background: var(--muted);
+    border-color: transparent;
   }
   .topbar .badge .badge-text { display: none; }
-  .topbar .badge .dot { width: 9px; height: 9px; flex-basis: 9px; }
+  .topbar .badge .dot { width: 6px; height: 6px; flex-basis: 6px; }
   main { padding: 14px 12px 40px; }
 
-  /* 触摸屏上 36px 的行高太窄：侧栏抽屉里的导航项按 44px 触控目标走 */
-  .nav button, .nav .nav-item { min-height: 44px; }
+  /* 抽屉里的导航项与桌面同高（36 最低 + 上下 8px 内边距 = 38px 实高）、
+     同字号。手机上把行距再拉大会让 7 项撑满整屏、还得滚动，
+     反而更难一眼扫完。 */
+  .nav { padding: 10px 8px; }
+  .nav button, .nav .nav-item { min-height: 36px; font-size: 14px; }
 
   .grid.cols-4, .grid.cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .kv { grid-template-columns: 104px minmax(0, 1fr); gap: 8px 12px; }
@@ -1876,7 +1886,6 @@ details.raw pre {
   input[type="search"], input[type="email"], input[type="url"],
   select, textarea { height: 38px; }
   textarea { height: auto; min-height: 120px; }
-  .nav button, .nav .nav-item { min-height: 44px; }
   .segmented button { height: 34px; padding: 0 12px; }
   .switch-track { width: 46px; height: 26px; flex-basis: 46px; }
   .switch-track::after { width: 20px; height: 20px; }
