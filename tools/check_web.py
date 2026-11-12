@@ -239,6 +239,56 @@ def reverse_tables(report):
     print("  反查表引用的 key %d 处已核对" % total)
 
 
+def check_block_close_suffix(report, app_js=None, i18n=None):
+    """带 </div> 尾巴的词条不能当行内片段用。
+
+    26.11.29 踩过：`common.countInline` 的值是
+    "<span class=\"hint\">共 {n} 项</span></div>" —— 结尾那个 `</div>` 是给
+    「整块内容 + 闭合容器」的场景准备的。把它塞进一条正在拼装的工具栏里，
+    容器会被提前闭合，后面的 spacer 与按钮全都掉到容器外面：
+    界面看起来只是「按钮跑到了下一行」，看不出是模板拼错了。
+
+    这条检查只做一件静态可见的事：app.js 里 `t('某 key')` 的实参 key，
+    如果它的译文里含 `</div>`，而调用处的字符串拼接又在同一行里继续接
+    `</span>` 或其它行内标签，就判失败。误报率靠「同一行内继续拼接」这条收窄。
+    """
+    i18n = i18n or I18N
+    app_js = app_js or APP_JS
+    if not os.path.isfile(i18n) or not os.path.isfile(app_js):
+        return
+    src = G.read_text(i18n)
+    # 收集值里带 </div> 的 key
+    risky = set()
+    for m in re.finditer(r'^\s{4}"((?:[^"\\]|\\.)*)"\s*:\s*"((?:[^"\\]|\\.)*)"', src, re.M):
+        if "</div>" in m.group(2):
+            risky.add(m.group(1))
+    if not risky:
+        print("  闭合标签词条：0 个")
+        return
+
+    app = G.read_text(app_js)
+    hits = []
+    for m in re.finditer(r"t\('([A-Za-z][\w.]*)'", app):
+        key = m.group(1)
+        if key not in risky:
+            continue
+        line_start = app.rfind("\n", 0, m.start()) + 1
+        line_end = app.find("\n", m.end())
+        line = app[line_start:line_end if line_end >= 0 else len(app)]
+        # 同一行里 t(...) 之后还有拼接、且拼的是行内闭合标签 —— 那是塞进了半截容器
+        after = line[line.index("t('" + key):]
+        if re.search(r"\)\s*\+\s*\"[^\"]*</(span|div)>", after):
+            hits.append((app.count("\n", 0, m.start()) + 1, key, line.strip()[:90]))
+
+    for line_no, key, snippet in hits:
+        report.fail("%s:%d" % (G.rel(app_js), line_no),
+                    "%r 的译文以 </div> 结尾，却当成行内片段接在容器里：%s "
+                    "—— 那个 </div> 会提前闭合容器，后续控件掉到容器外面"
+                    % (key, snippet))
+    if not hits:
+        print("  闭合标签词条用在了正确的位置：%d 个带 </div> 的词条未在行内拼接" % len(risky))
+
+
 def main(argv=None):
     G.setup_stdio()
     argv = sys.argv[1:] if argv is None else argv
@@ -251,6 +301,8 @@ def main(argv=None):
     reverse_tables(report)
     check_page_assembly(report, index)
     inline_spacing_patches(report, app_js, index)
+    # 传 app_js：变异测试时要在副本上跑，不能永远读仓库里那份
+    check_block_close_suffix(report, app_js)
     return report.finish()
 
 

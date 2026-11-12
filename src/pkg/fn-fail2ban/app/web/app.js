@@ -1085,20 +1085,22 @@
     });
     list = sortJailList(list, sort);
 
-    // 页面标题由顶栏统一呈现；写入位置这类路径说明归「设置 · 说明」，
-    // 不再在每页标题行重复一遍（正式界面里看不出该不该改、改了有没有用）。
-    var html = '<div class="view-head"><div class="spacer"></div>' +
-      ("<button class=\"btn primary\" data-act=\"jail-new\">+ " + t('jail.newTitle') + "</button></div>");
-
-    html += '<div class="toolbar">' +
-      ("<input type=\"text\" id=\"jailSearch\" class=\"toolbar-search\" placeholder=\"" + t('jail.searchPlaceholder') + "\" value=\"") + esc(opts.search) + '">' +
-      '<select id="jailScope" style="width:auto">' +
+    // 顶部一行放完：搜索、作用域、条数，最右是「新建 Jail」。
+    // 原来「新建 Jail」单独占一行、搜索那组再占一行，两行各自都只用了一半宽度，
+    // 而中间空出来的地方什么也没有。
+    var html = '<div class="toolbar jail-bar">' +
+      ("<input type=\"text\" id=\"jailSearch\" class=\"toolbar-search jail-search\" placeholder=\"" + t('jail.searchPlaceholder') + "\" value=\"") + esc(opts.search) + '">' +
+      '<select id="jailScope" class="jail-scope">' +
       option('enabled', t('jail.scopeEnabled'), opts.scope) +
       option('active', t('jail.scopeActive'), opts.scope) +
       option('managed', t('jail.scopeManaged'), opts.scope) +
       option('all', t('jail.scopeAll'), opts.scope) +
       '</select>' +
-      "<span class=\"hint\">" + t('common.countInline', { n: list.length }) + "</span>" +
+      // 用 common.count 而不是 common.countInline：后者自带一个 </div>，
+      // 会把这条工具栏提前闭合，后面的 spacer 与「新建 Jail」于是掉到容器外面。
+      "<span class=\"hint jail-count\">" + t('common.count', { n: list.length }) + "</span>" +
+      '<div class="spacer"></div>' +
+      ("<button class=\"btn primary\" data-act=\"jail-new\">+ " + t('jail.newTitle') + "</button>") +
       '</div>' +
       ("<div class=\"card\"><h3>" + t('jail.listTitle') + '<span class="h3-grow"></span>' +
         sortControl('jail', [
