@@ -2209,9 +2209,10 @@
     return '<div class="card-foot"><div class="spacer"></div>' + (buttons || '') + '</div>';
   }
 
-  // 卡片标题行 + 行内动作（如「立即备份」「新增渠道」）
-  function cardHead(title, actions) {
-    return '<div class="card-head"><h3>' + esc(title) + '</h3>' +
+  // 卡片标题行 + 行内动作（如「立即备份」「新增渠道」）。
+  // extra 是附加类名，用于个别卡片头的特殊排布（如 ch-inline / ch-stack）。
+  function cardHead(title, actions, extra) {
+    return '<div class="card-head' + (extra ? ' ' + extra : '') + '"><h3>' + esc(title) + '</h3>' +
       (actions ? '<div class="spacer"></div>' + actions : '') + '</div>';
   }
 
@@ -4124,8 +4125,10 @@
   // ---- 黑名单：敲门那边的通用黑名单分页表 ----
   function fnkListPanel() {
     var bl = state.fnkBlacklist;
+    // 「刷新列表」放在标题右侧同一行：它只影响下面这张表，
+    // 掉到下一行会让人以为是整页的操作。
     var html = '<div class="card">' + cardHead(t('fnk.blacklistTitle'),
-      '<button class="btn sm" data-act="fnk-reload">' + t('common.refreshList') + '</button>') +
+      '<button class="btn sm" data-act="fnk-reload">' + t('common.refreshList') + '</button>', 'ch-inline') +
       '<div class="toolbar">' +
       '<input type="text" id="fnkSearch" class="toolbar-search" placeholder="' +
       esc(t('fnk.searchPlaceholder')) + '" value="' + esc(state.fnkOpts.search) + '">' +

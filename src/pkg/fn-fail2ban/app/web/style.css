@@ -1316,6 +1316,20 @@ td .cell-actions .btn.danger:hover {
   font-variant-numeric: tabular-nums;
 }
 .kv .badge + .badge { margin-left: 4px; }
+/* 键值清单里的状态标签不带胶囊底：这一列本来就是「标签 → 状态」的对照，
+   底色块会把一行行文字切成斑马条，读起来更费力。状态只靠文字色区分
+   （绿=正常 / 橙=异常 / 灰=未就绪），紧凑但不抢眼。 */
+.kv .badge {
+  height: auto;
+  padding: 0;
+  background: none;
+  border-color: transparent;
+  font-weight: 500;
+}
+.kv .badge.ok { color: var(--ok); }
+.kv .badge.warn { color: var(--warn); }
+.kv .badge.danger { color: var(--danger); }
+.kv .badge.muted { color: var(--dim); }
 
 /* ---------------------------------------------------------- 折叠原文 --- */
 
@@ -2570,6 +2584,19 @@ details.raw pre {
   .card-head .seg { order: 5; flex: 1 1 100%; }
   .card-head .seg button { flex: 1; }
   .card-head .spacer { display: none; }
+  /* 「标题 + 单个小按钮」这一型也让它们同排：标题独占整行、按钮被顶到
+     下一行的排法在只有一个小动作时纯属浪费高度。标题吃剩余宽度、超长省略，
+     按钮固定宽度留在右侧。带分段控件（.seg）的卡片头不在此列 —— 那是给
+     整条标签栏腾地方，本来就该换行。 */
+  .card-head.ch-inline { flex-wrap: nowrap; }
+  .card-head.ch-inline > h3 {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .card-head.ch-inline .spacer { display: block; flex: 1 1 auto; }
+  .card-head.ch-inline .btn { flex: 0 0 auto; }
   /* 只有徽标的卡片头（如「备份文件」右侧的条数）：标题与徽标一排、徽标靠右。
      上面让标题独占一行是给分段控件腾地方，这类卡片没有分段控件，照搬只会
      把徽标挤到第二行、白白多占一行高度。 */
