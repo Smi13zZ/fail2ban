@@ -1268,14 +1268,19 @@ td .cell-actions .btn.danger:hover {
 
 /* ------------------------------------------------------------ IP 块 --- */
 
-/* 白名单列表：一行一个地址，行尾是删除按钮，行与行之间一条细线。
+/* 白名单列表：一行一个地址，行尾是编辑 / 删除，行与行之间一条细线。
    地址用等宽字体并允许在窄屏换行 —— IP / 网段是逐字符读的，
-   折行比截断成省略号更容易核对。 */
+   折行比截断成省略号更容易核对。
+
+   外框圆角与输入框同一档（--radius）：两者上下相邻、宽度也一致，
+   圆角不同会显得像两块错位的部件。上边距 8px 与输入行的间距对齐，
+   贴在一起时边框会挤成一条粗线。 */
 .ip-list {
   display: flex;
   flex-direction: column;
+  margin-top: 8px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   overflow: hidden;
 }
 .ip-row {
