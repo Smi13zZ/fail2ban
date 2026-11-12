@@ -2961,6 +2961,9 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
 .card-desc { margin: 0 0 14px; font-size: 12.5px; line-height: 1.6; }
 /* 卡片内末尾的一行小注：与内容之间留一段空白，不用内联 margin 补 */
 .card-note { font-size: 12px; color: var(--faint); margin-top: 12px; }
+/* 居中的卡片脚注：通知渠道的空态由「图标 + 一句话 + 支持列表」三块组成，
+   前两块居中而脚注左对齐会像没对齐。居中的只有这一处，不加到 .card-note 上。 */
+.card-note-center { text-align: center; }
 /* 卡片内分隔线之后的一组动作按钮 */
 .card-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 /* 紧跟说明段落的动作条：上边距由段落的下边距提供，再多一层就空得发虚 */
