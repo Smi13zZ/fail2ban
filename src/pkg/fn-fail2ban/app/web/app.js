@@ -3308,7 +3308,9 @@
     var failed = !!(info && info.ok === false && info.reason && info.reason !== 'not_checked');
     var checking = !!state.update.checking;
 
-    var html = '<div class="help">' + esc(t('update.hint')) + '</div>';
+    // 页首不再放一句概括整页的说明：页面标题、卡片标题、状态条三处已经把
+    // 「谁在检查、有没有新版本、能做什么」讲完了，再加一句只是重复。
+    var html = '';
 
     var releaseUrl = (info && info.html_url) || '';
     if (!releaseUrl) {
