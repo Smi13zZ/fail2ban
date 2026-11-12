@@ -3055,12 +3055,13 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
    不能改成 table-layout:auto —— 定宽表被压到视口宽时，
    浏览器会优先满足写了宽度的列，把没写宽度的名称列与操作列压成 0，
    结果「文字显示不出来」比横向滚动更难受。
-   760px = 960 里去掉窄屏隐藏的接管列（96）与三个参数列（78×3）。 */
+   856px = 全量宽度里去掉窄屏隐藏的三个参数列（78×3），接管列在窄屏保留，
+   三列状态（接管 / 启用 / 运行状态）在任何宽度下都并排可比。 */
 @media (max-width: 900px) {
   /* 选择器逐个写成 table.fixed.jail-table：.table-wrap table.fixed 那条
      （min-width:0）在 ≤720px 断点里，特异性比 .table-wrap table.jail-table 高，
      少了 .fixed 这一层就会被它盖掉，横向滚动不会出现。 */
-  .table-wrap table.fixed.jail-table { min-width: 760px; }
+  .table-wrap table.fixed.jail-table { min-width: 856px; }
 }
 
 /* 手机端：路径行把省略号挪到前面，保住尾部的文件名 */

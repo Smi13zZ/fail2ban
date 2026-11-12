@@ -1039,7 +1039,7 @@
   function jailTableHtml(list, actions) {
     var html = '<div class="table-wrap"><table class="fixed jail-table"><thead><tr>' +
       '<th class="c-jail">' + t('jail.colName') + '</th>' +
-      ("<th class=\"c-managed hide-sm\">" + t('jail.colManaged') + "</th>") +
+      ("<th class=\"c-managed\">" + t('jail.colManaged') + "</th>") +
       ("<th class=\"c-enabled\">" + t('jail.colEnabled') + "</th>") +
       ("<th class=\"c-runstate\">" + t('jail.colRunState') + "</th>") +
       ('<th class="c-count hide-md">maxretry</th>' +
@@ -1062,7 +1062,7 @@
             : '<button class="btn sm" data-act="jail-start" data-name="' + esc(jail.name) + ("\">" + t('common.start') + "</button>"));
       html += '<tr>' +
         '<td class="c-jail"><strong>' + esc(jail.name) + '</strong></td>' +
-        '<td class="c-managed hide-sm">' + managedBadge(jail) + '</td>' +
+        '<td class="c-managed">' + managedBadge(jail) + '</td>' +
         '<td class="c-enabled">' + enabledBadge(jail) + '</td>' +
         '<td class="c-runstate">' + runStateBadge(jail) + '</td>' +
         '<td class="c-count hide-md">' + esc(jail.values.maxretry || '—') + '</td>' +
