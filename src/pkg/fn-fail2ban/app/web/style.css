@@ -1152,7 +1152,11 @@ td .cell-actions .btn.danger:hover {
   max-width: 168px;
   height: 30px;
   padding: 0 28px 0 10px;
-  font-size: 12.5px;
+  /* 这个下拉框嵌在卡片标题（h3，font-weight 600）里，不显式声明就会把
+     标题的粗体继承下来 —— 与页面上其余下拉框放在一起时，它明显粗一号，
+     看着像被强调过。字号也回到 select 的基础档，只比正文小半档。 */
+  font-size: 13px;
+  font-weight: 400;
   border-radius: var(--radius-sm);
   background-position: calc(100% - 13px) 50%, calc(100% - 8px) 50%;
 }
