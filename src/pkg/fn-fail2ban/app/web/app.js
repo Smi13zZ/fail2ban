@@ -85,8 +85,10 @@
     overview: null,
     jails: [],
     settings: null,
-    // 全局白名单（ignoreip）的 Chip 草稿；null = 尚未从 settings 拆分
+    // 全局白名单（ignoreip）的条目草稿；null = 尚未从 settings 拆分
     ignoreIpDraft: null,
+    // 正在行内编辑的那一条的索引；null = 没有在编辑
+    ignoreIpEdit: null,
     filters: [],
     filterSel: null,
     filterData: null,
@@ -2064,11 +2066,13 @@
   // ignoreip 字段在全局设置里要换成自定义控件，其它字段仍走 fieldHtml
   function ignoreIpFieldHtml() {
     return ("<div class=\"field\"><label>" + t('set.ignoreipLabel') + "</label>") +
-      '<div id="ignoreIpWrap">' + ignoreIpChipsHtml(ignoreIpState()) + '</div>' +
+      // 先输入、后列表：新条目就是从上面这一行加进去的，
+      // 输入框贴着急要操作的列表，比先看一长串再找到底部的输入框顺手。
       '<div class="row" data-chip-add>' +
       ("<input type=\"text\" id=\"ignoreIpInput\" placeholder=\"" + t('set.ignoreipPlaceholder') + "\">") +
       ("<button type=\"button\" class=\"btn\" data-act=\"ignoreip-add\">" + t('common.add') + "</button>") +
       '</div>' +
+      '<div id="ignoreIpWrap">' + ignoreIpChipsHtml(ignoreIpState()) + '</div>' +
       ("<div class=\"help\">" + t('set.ignoreipHelp1')) +
       t('set.ignoreipHelp2') +
       (t('set.ignoreipHelp3') + "</div></div>");
@@ -2091,16 +2095,57 @@
     host.innerHTML = ignoreIpChipsHtml(items);
   }
 
-  // 白名单逐行列出：左侧地址、右侧行尾「删除」，行与行之间一条细线。
+  // 保存行内编辑：新值先按与「添加」同一套规则拆分校验，再替换掉原位置。
+  // 改成与另一条重复时拒绝而不是静默丢弃 —— 用户以为自己改成功了。
+  function saveIgnoreIpEdit() {
+    var input = $('#ignoreIpEdit');
+    var index = state.ignoreIpEdit;
+    var items = ignoreIpState();
+    if (!input || index === null || index < 0 || index >= items.length) {
+      state.ignoreIpEdit = null;
+      renderIgnoreIpList();
+      return;
+    }
+    var parsed = splitIgnoreIp(input.value);
+    if (!parsed.length) { toast(t('err.fillIpOrCidr'), 'warn'); return; }
+    if (parsed.length > 1) {
+      // 一行只放一个地址：多填了就拒绝，避免把一行变成多行却不自知
+      toast(t('err.fillIpOrCidr'), 'warn');
+      return;
+    }
+    var next = parsed[0];
+    var dup = items.some(function (item, i) { return i !== index && item === next; });
+    if (dup) { toast(t('err.dupIgnoreIp'), 'warn', 2400); return; }
+    items[index] = next;
+    state.ignoreIpEdit = null;
+    renderIgnoreIpList();
+  }
+
+  // 白名单逐行列出：左侧地址、右侧「编辑 / 删除」，行与行之间一条细线。
   // 原先是一颗颗胶囊，多个地址时颜色块堆在一起，既看不出边界也扫不了顺序。
+  // 正在编辑的那一行换成输入框 + 保存/取消，其余行保持只读 ——
+  // 行内编辑比弹窗轻，改一个地址不用离开当前视线。
   function ignoreIpChipsHtml(items) {
     if (!items.length) {
       return t('set.ignoreipEmptyInline');
     }
+    var editing = state.ignoreIpEdit;
     return '<div class="ip-list" id="ignoreIpList">' +
       items.map(function (value, index) {
+        if (editing === index) {
+          return '<div class="ip-row ip-row-edit">' +
+            '<input type="text" class="ip-edit" id="ignoreIpEdit" data-index="' + index +
+            '" value="' + esc(value) + '">' +
+            '<button type="button" class="btn sm primary" data-act="ignoreip-save" data-index="' +
+            index + '">' + t('common.save') + '</button>' +
+            '<button type="button" class="btn sm" data-act="ignoreip-cancel">' +
+            t('common.cancel') + '</button>' +
+            '</div>';
+        }
         return '<div class="ip-row">' +
           '<span class="ip-addr mono">' + esc(value) + '</span>' +
+          '<button type="button" class="btn sm" data-act="ignoreip-edit" data-index="' +
+          index + '" title="' + t('common.edit') + '">' + t('common.edit') + '</button>' +
           '<button type="button" class="btn sm danger" data-act="ignoreip-remove" data-index="' +
           index + '" title="' + t('common.delete') + '">' + t('common.delete') + '</button>' +
           '</div>';
@@ -4437,7 +4482,30 @@
       var index = parseInt(trigger.dataset.index, 10);
       var items = ignoreIpState();
       if (!isNaN(index) && index >= 0 && index < items.length) items.splice(index, 1);
+      // 删掉的正好是正在编辑的那条时，退出编辑态，否则索引会指向错位的条目
+      if (state.ignoreIpEdit === index) state.ignoreIpEdit = null;
+      else if (state.ignoreIpEdit !== null && state.ignoreIpEdit > index) state.ignoreIpEdit -= 1;
       renderIgnoreIpList();
+      return;
+    }
+
+    if (act === 'ignoreip-edit') {
+      var editIndex = parseInt(trigger.dataset.index, 10);
+      state.ignoreIpEdit = isNaN(editIndex) ? null : editIndex;
+      renderIgnoreIpList();
+      var editInput = $('#ignoreIpEdit');
+      if (editInput) { editInput.focus(); editInput.select(); }
+      return;
+    }
+
+    if (act === 'ignoreip-cancel') {
+      state.ignoreIpEdit = null;
+      renderIgnoreIpList();
+      return;
+    }
+
+    if (act === 'ignoreip-save') {
+      saveIgnoreIpEdit();
       return;
     }
 
@@ -5314,6 +5382,17 @@
         addIgnoreIpFromInput();
         return;
       }
+      // 行内编辑框：回车保存，与常见的表格内编辑一致
+      if (event.target.id === 'ignoreIpEdit') {
+        event.preventDefault();
+        saveIgnoreIpEdit();
+        return;
+      }
+    }
+    if (event.key === 'Escape' && event.target.id === 'ignoreIpEdit') {
+      event.preventDefault();
+      state.ignoreIpEdit = null;
+      renderIgnoreIpList();
     }
   }
 
