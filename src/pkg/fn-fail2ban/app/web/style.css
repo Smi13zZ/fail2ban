@@ -1413,12 +1413,48 @@ details.raw pre {
 /* ---------------------------------------------------------- 日志页工具栏 --- */
 
 /* 一行放完：左边按级别筛选，右边依次是关键字、行数、导出、刷新、自动刷新。
-   靠右的这一串里，前两个决定「看哪些」、后三个决定「怎么再取一次」，
-   所以自动刷新紧挨着刷新放，不跟参数混在一起。 */
-/* 关键字框按最长的那条占位符定宽：英文 "Filter by keyword (IP, jail name…)"
-   实测要 235px（文字 213 + 左右内边距 22），220px 会把结尾吃掉半个词。 */
-.toolbar .log-search { flex: 0 1 260px; width: 260px; max-width: 260px; }
-.toolbar .log-lines { flex: 0 0 auto; }
+   前两个决定「看哪些」、后三个决定「怎么再取一次」，所以自动刷新紧挨着刷新放。
+
+   这一条上的控件密度比别处高：六个级别标签 + 五个控件要塞进一行，
+   每处内边距各收 2px，合起来就是四十多像素，正好换来常见的笔记本宽度。 */
+/* 锁死一行（.toolbar 基类默认换行）。允许换行时 flex 先按 flex-basis 排好行、
+   再考虑收缩，于是空间一紧就整组掉到第二行，而不是把关键字框压窄；
+   这里要的正是「先压窄、压到 120px 还放不下才换行」。
+   实测一行最少需要 682px（级别筛选 268 + 五个控件收到最窄），
+   侧栏展开的内容区最窄也有 697px，所以桌面宽度下始终是一行。 */
+.toolbar.log-bar { flex-wrap: nowrap; gap: 8px; }
+.toolbar.log-bar > .seg { flex: 0 0 auto; padding: 3px; }
+.toolbar.log-bar > .seg button { padding: 0 8px; }
+.toolbar.log-bar > .log-lines { padding-right: 24px; }
+
+/* 右侧五个控件是一组：要么全在同一行，要么整组一起换到下一行。
+   拆开排时窗口一窄最先掉下去的就是末尾的「刷新 / 自动刷新」，
+   与上面的控件错位，看着像多了一行零碎东西。 */
+.log-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* min-width:0 是关键：默认的 auto 会把这一组的下限卡在子控件的 min-content 上，
+     于是内容区稍窄就整组溢出、把整页顶出横向滚动条。放开之后，
+     空间不够时先压关键字框（它有 120px 的下限），压到底才轮到整条工具栏换行。 */
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+}
+
+/* 关键字框：200px 是舒适宽度，空间紧时一直收到 120px 才让这一组换行。
+   中文占位符实测要 199px、英文 233px，所以两种语言在 200px 下结尾都是省略号；
+   宽度不够时优先牺牲它 —— 占位符只是提示，按钮和行数才是要点。 */
+.log-tools > .log-search {
+  flex: 0 1 200px;
+  width: 200px;
+  min-width: 120px;
+  /* 收窄到放不下占位符时补个省略号：直接截断像是坏了，
+     省略号能看出「这里还有字，只是宽度不够」。 */
+  text-overflow: ellipsis;
+}
+.log-tools > .log-lines { flex: 0 0 auto; }
+.log-tools > .btn { flex: 0 0 auto; padding: 0 8px; }
 
 /* 自动刷新：一个标签包住框与文字，整块可点。
    内联复选框必须显式给宽高 —— .switch 里那条 width:auto 会把
@@ -1426,7 +1462,7 @@ details.raw pre {
 .log-auto {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 7px;
   flex: 0 0 auto;
   font-size: 13px;
   color: var(--dim);
@@ -2817,10 +2853,18 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
   .logline .t { min-width: 0; font-size: 11px; }
   .logline .m { word-break: break-word; overflow-wrap: anywhere; }
 
-  /* 日志工具栏在窄屏自动分三行：级别筛选一行、关键字一行、其余控件一行。
-     关键字按 .toolbar 的窄屏规则独占一整行，行数 / 导出 / 刷新 / 自动刷新
-     宽度加起来放得下，就一起留在最后一行。 */
-  .toolbar.log-bar { row-gap: 8px; }
-  .toolbar.log-bar > .log-lines { flex: 0 0 auto; }
+  /* 手机端锁死一行会把控件挤成一条缝，恢复换行，
+     按「级别筛选 / 关键字 / 其余控件」分成三行：
+     关键字独占一整行，行数 / 导出 / 刷新 / 自动刷新宽度加起来放得下，留在最后一行。 */
+  .toolbar.log-bar { flex-wrap: wrap; }
+  .log-tools { flex-wrap: wrap; gap: 8px; }
+  .log-tools > .log-search {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+  .log-tools > .log-lines { flex: 0 0 auto; }
+  .log-tools > .btn { padding: 0 10px; }
 }
 

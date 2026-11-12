@@ -3797,7 +3797,10 @@
           (state.logOpts.level === id ? ' class="on"' : '') + '>' +
           esc(logLevelLabel(id)) + '</button>';
       }).join('') +
-      '</div><div class="spacer"></div>' +
+      '</div>' +
+      // 右侧这五个控件包成一组：窗口窄到放不下时整组一起换行，
+      // 而不是让最后两个按钮单独掉下去、与上面的控件错位
+      '<div class="log-tools">' +
       '<input type="text" id="logKeyword" class="log-search" placeholder="' +
         esc(t('log.keywordPlaceholder')) + '" value="' + esc(state.logOpts.keyword) + '">' +
       '<select id="logLines" class="log-lines">' +
@@ -3809,6 +3812,7 @@
       '<label class="log-auto"><input type="checkbox" id="logAuto"' +
         (state.logOpts.auto ? ' checked' : '') + '><span>' +
         esc(t('log.autoRefreshShort')) + '</span></label>' +
+      '</div>' +
       '</div>';
 
     // 重绘前记住滚动位置：自动刷新每 5 秒整块重绘一次，归零会让正在读的位置跳走。
