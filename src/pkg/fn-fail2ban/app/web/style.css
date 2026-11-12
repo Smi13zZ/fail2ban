@@ -177,7 +177,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   position: sticky;
   top: 0;
   height: 100vh;
-  padding-top: env(safe-area-inset-top, 0px);
   z-index: 40;
   transition: width .16s ease, flex-basis .16s ease;
 }
@@ -1750,6 +1749,10 @@ details.raw pre {
 
 /* --- ≤900px：侧栏改抽屉 + 遮罩 --- */
 @media (max-width: 900px) {
+  /* 抽屉从屏幕最顶端开始，顶部不再留安全区：
+     它覆盖在应用窗口之上，刘海与状态栏那块已经被飞牛的外层标题栏占掉了，
+     再垫 47px 只会让第一项悬在离顶很远的地方。安全区只由底部的
+     主题 / 语言按钮区承担（见 .sidebar-foot）。 */
   .sidebar {
     position: fixed;
     left: 0;
