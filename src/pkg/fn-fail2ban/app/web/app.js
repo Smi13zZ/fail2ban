@@ -2091,15 +2091,19 @@
     host.innerHTML = ignoreIpChipsHtml(items);
   }
 
+  // 白名单逐行列出：左侧地址、右侧行尾「删除」，行与行之间一条细线。
+  // 原先是一颗颗胶囊，多个地址时颜色块堆在一起，既看不出边界也扫不了顺序。
   function ignoreIpChipsHtml(items) {
     if (!items.length) {
       return t('set.ignoreipEmptyInline');
     }
     return '<div class="ip-list" id="ignoreIpList">' +
       items.map(function (value, index) {
-        return '<span class="ip-chip">' + esc(value) +
-          '<button type="button" data-act="ignoreip-remove" data-index="' + index +
-          ("\" title=\"" + t('set.remove') + "\" aria-label=\"" + t('set.remove') + " ") + esc(value) + '">✕</button></span>';
+        return '<div class="ip-row">' +
+          '<span class="ip-addr mono">' + esc(value) + '</span>' +
+          '<button type="button" class="btn sm danger" data-act="ignoreip-remove" data-index="' +
+          index + '" title="' + t('common.delete') + '">' + t('common.delete') + '</button>' +
+          '</div>';
       }).join('') + '</div>';
   }
 

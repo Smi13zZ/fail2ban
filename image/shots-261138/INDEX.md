@@ -1,6 +1,6 @@
-# 截图索引（面板 26.11.37）
+# 截图索引（面板 26.11.38）
 
-- 生成时间：2026-11-12 14:29:39
+- 生成时间：2026-11-12 14:43:03
 - 面板地址：http://127.0.0.1:18752/
 - 浏览器：Chrome/156.0.8078.79（CDP 直连，不走 --screenshot）
 - 主题：跟随系统（此环境解出浅色） ／ 语言：zh
@@ -28,7 +28,7 @@
 | `desktop-fnknock-log.png` | fnknock · log | 1440×900 | fn-knock 联动：1 张卡片、1 处空状态、8 个按钮、侧栏 7 项、标题：同步记录 | — |
 | `desktop-settings-panel.png` | 设置 · panel | 1440×900 | 设置：1 张卡片、12 个按钮、侧栏 7 项、标题：面板行为 | — |
 | `desktop-settings-appearance.png` | 设置 · appearance | 1440×900 | 设置：1 张卡片、10 个按钮、侧栏 7 项、标题：外观与布局 | — |
-| `desktop-settings-policy.png` | 设置 · policy | 1440×1456 | 设置：1 张卡片、17 个按钮、侧栏 7 项、标题：默认防护策略 | — |
+| `desktop-settings-policy.png` | 设置 · policy | 1440×1533 | 设置：1 张卡片、17 个按钮、侧栏 7 项、标题：默认防护策略 | — |
 | `desktop-settings-notify.png` | 设置 · notify | 1440×1252 | 设置：3 张卡片、2 处空状态、22 个按钮、侧栏 7 项、标题：总开关 / 通知渠道 / 投递记录 | — |
 | `desktop-settings-maint.png` | 设置 · maint | 1440×1187 | 设置：3 张卡片、2 行表格、19 个按钮、侧栏 7 项、标题：备份与恢复 / 自动备份 / 备份文件 | — |
 | `desktop-settings-storage.png` | 设置 · storage | 1440×900 | 设置：1 张卡片、12 行表格、13 个按钮、侧栏 7 项、标题：空间占用 | — |
@@ -54,7 +54,7 @@
 | `mobile-fnknock-log.png` | fnknock · log | 780×1688 | fn-knock 联动：1 张卡片、1 处空状态、8 个按钮、侧栏 7 项、标题：同步记录 | — |
 | `mobile-settings-panel.png` | 设置 · panel | 780×1688 | 设置：1 张卡片、12 个按钮、侧栏 7 项、标题：面板行为 | — |
 | `mobile-settings-appearance.png` | 设置 · appearance | 780×1688 | 设置：1 张卡片、10 个按钮、侧栏 7 项、标题：外观与布局 | — |
-| `mobile-settings-policy.png` | 设置 · policy | 780×3098 | 设置：1 张卡片、17 个按钮、侧栏 7 项、标题：默认防护策略 | — |
+| `mobile-settings-policy.png` | 设置 · policy | 780×3260 | 设置：1 张卡片、17 个按钮、侧栏 7 项、标题：默认防护策略 | — |
 | `mobile-settings-notify.png` | 设置 · notify | 780×2988 | 设置：3 张卡片、2 处空状态、22 个按钮、侧栏 7 项、标题：总开关 / 通知渠道 / 投递记录 | — |
 | `mobile-settings-maint.png` | 设置 · maint | 780×2948 | 设置：3 张卡片、2 行表格、19 个按钮、侧栏 7 项、标题：备份与恢复 / 自动备份 / 备份文件 | — |
 | `mobile-settings-storage.png` | 设置 · storage | 780×1990 | 设置：1 张卡片、12 行表格、13 个按钮、侧栏 7 项、标题：空间占用 | — |
@@ -91,7 +91,7 @@
 
 ### 更新页版本对比箭头（desktop）
 
-- 两个版本号：v26.11.37 → v26.11.37
+- 两个版本号：v26.11.38 → v26.11.38
 - 箭头容器：20×20，display=flex；内层 svg：20×20
 - 落点是否在两个版本号之间：是
 
