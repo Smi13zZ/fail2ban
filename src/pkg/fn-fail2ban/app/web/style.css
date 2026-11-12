@@ -859,8 +859,60 @@ table.fixed td.c-filter { text-overflow: ellipsis; }
   background: var(--danger-soft);
   border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
 }
-/* 封禁页顶部一整行：选择器 + 封禁输入 + 解封全部，允许换行但保持同一行基线 */
-.ban-bar input[type="text"] { max-width: 280px; }
+/* ---------------------------------------------------------- 封禁页工具栏 --- */
+
+/* 整页一条工具栏，八个控件：Jail 选择器 / 手动封禁输入 / 封禁 /
+   搜索 / 条数 / 排序字段 / 升降序 / 解封全部。 */
+
+/* 左组（Jail 选择器 / 手动封禁 / 封禁）与右组（搜索 / 条数 / 排序 / 解封全部）。
+   桌面宽度下整条锁死一行；手机端八个控件放不下，由末尾的媒体查询恢复换行。
+   这一条上的控件密度比别处高：间距按 6px。 */
+.toolbar.ban-bar { flex-wrap: nowrap; gap: 6px; }
+.toolbar.ban-bar > .spacer { flex: 1 1 0; min-width: 0; }
+
+.ban-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* min-width:0 必须写：默认的 auto 会把这一组的下限卡在输入框的「内在宽度」上
+     （input 的 size=20 约 166px，与 min-width 无关），于是差几十像素就整组溢出、
+     把整页顶出横向滚动条，而不是让输入框收窄。 */
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.ban-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* 三个输入框参与分配剩余空间：有余量时长到各自 max-width，
+   不够时一起收窄（内容按省略号收尾），永远不把整行顶宽。
+   选择器带 .toolbar.ban-bar 前缀，是为了盖掉基类 `.toolbar input[type="text"]`
+   的 width:260px 与 min-width:auto —— 后者会把下限卡在 input 的内在宽度上。 */
+.toolbar.ban-bar .ban-jail { flex: 1 1 auto; width: auto; min-width: 0; max-width: 220px; }
+.toolbar.ban-bar .ban-ip {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 260px;
+  text-overflow: ellipsis;
+}
+.toolbar.ban-bar .ban-search {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 200px;
+  text-overflow: ellipsis;
+}
+/* 条数文字不参与压缩：它是「当前看到几条」的唯一提示，压掉就没意义了 */
+.ban-tools > .ban-count { flex: 0 0 auto; white-space: nowrap; }
+.ban-tools > .sort-ctrl { flex: 0 0 auto; }
+.ban-main > .btn,
+.ban-tools > .btn { flex: 0 0 auto; }
 
 .ban-table.wide { min-width: 880px; }
 
@@ -2858,6 +2910,17 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
      关键字独占一整行，行数 / 导出 / 刷新 / 自动刷新宽度加起来放得下，留在最后一行。 */
   .toolbar.log-bar { flex-wrap: wrap; }
   .log-tools { flex-wrap: wrap; gap: 8px; }
+
+  /* 封禁页那条工具栏同理：八个控件在 390px 下放不进一行，
+     改成三段：封禁操作一行、搜索框独占一行、条数与排序动作一行。
+     输入框回到较宽的舒适宽度，不再被压成「搜索 IP…」这种看不清的窄条。 */
+  .toolbar.ban-bar { flex-wrap: wrap; row-gap: 8px; }
+  .toolbar.ban-bar > .spacer { display: none; }
+  .ban-main { flex: 1 1 100%; }
+  .ban-tools { flex: 1 1 100%; flex-wrap: wrap; row-gap: 8px; }
+  .toolbar.ban-bar .ban-jail { flex: 1 1 0; max-width: none; }
+  .toolbar.ban-bar .ban-ip { flex: 1 1 0; max-width: none; }
+  .toolbar.ban-bar .ban-search { flex: 1 1 100%; max-width: none; }
   .log-tools > .log-search {
     flex: 1 1 100%;
     width: 100%;
