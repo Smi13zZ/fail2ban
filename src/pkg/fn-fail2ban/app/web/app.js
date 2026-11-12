@@ -861,6 +861,20 @@
 
   /* ------------------------------------------------------------- 概览 */
 
+  // systemctl is-active 的原样输出 → 徽章。只认得出「正在跑」与「没在跑」两类，
+  // 其余（unknown / not-installed / 空）当作无从判断，用灰而不是硬套橙 ——
+  // 那说明面板根本没拿到 systemd 的答复，不是服务本身有问题。
+  var SYSTEMD_OK = { active: 1, reloading: 1, activating: 1 };
+  var SYSTEMD_BAD = { inactive: 1, failed: 1, deactivating: 1 };
+
+  function systemdBadge(raw) {
+    var text = String(raw || '').trim();
+    if (!text || text === '—') return '<span class="badge muted">—</span>';
+    if (SYSTEMD_OK[text]) return '<span class="badge ok">' + esc(text) + '</span>';
+    if (SYSTEMD_BAD[text]) return '<span class="badge warn">' + esc(text) + '</span>';
+    return '<span class="badge muted">' + esc(text) + '</span>';
+  }
+
   function renderDashboard() {
     var data = state.overview;
     var host = $('#view');
@@ -893,7 +907,11 @@
         ? '<span class="badge ' + (info.running ? 'ok' : 'warn') + '">' +
           (info.running ? t('jail.scopeActive') : t('jail.noneRunning')) + '</span>'
         : t('dash.badgeNotInstalled')) +
-      kv('systemd', esc(svcState.raw || '—')) +
+      // systemd 也走同一套徽章：unit 正在运行是正常态（绿），
+      // 停着或失败是未就绪态（橙），拿不到值才灰。值是 systemctl 的原样输出
+      // （active / inactive / failed / unknown），不翻译 —— 排查故障时
+      // 用户要跟命令行输出对得上，换成中文反而对不上。
+      kv('systemd', systemdBadge(svcState.raw)) +
       // 键值清单里的状态统一走徽章：正常=绿、异常/未就绪=橙、无从判断=灰。
       // 之前「开机自启」直接输出纯文本，同一张卡里一半是彩字一半是黑字，看不出哪个是状态。
       kv(t('dash.autostart'), svcState.enabled
