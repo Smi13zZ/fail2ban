@@ -2528,6 +2528,19 @@ details.raw pre {
   white-space: nowrap;
 }
 .card-head .spacer { flex: 1; }
+/* 标题 + 说明叠放在左、动作在右：说明跟着标题一起吃掉剩余宽度，
+   不再单独占一整行。窄屏上说明按两行折，按钮仍留在原位。 */
+.ch-stack { align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+.ch-stack .ch-main { min-width: 0; flex: 1 1 auto; }
+.ch-stack .ch-main h3 { margin-bottom: 0; }
+/* 说明贴着标题往下 5px、12px 字号、更淡的一档灰：
+   它是标题的注解，不该和正文抢同一档颜色。 */
+.ch-stack .ch-main .hint {
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--faint);
+  line-height: 1.5;
+}
 /* 卡片头里的分段控件与按钮不参与收缩，但要允许换行到下一行 */
 .card-head .seg { flex: 0 0 auto; }
 .card-head .btn { flex: 0 0 auto; }
@@ -2535,6 +2548,11 @@ details.raw pre {
 @media (max-width: 720px) {
   .card-head { gap: 6px; }
   .card-head > h3 { flex: 1 1 100%; }
+  /* 「标题 + 说明 / 按钮」这一型不跟着换行：说明本来就该在标题下面，
+     让它把标题挤成一块、按钮再换到第三行反而更散。 */
+  .card-head.ch-stack { flex-wrap: nowrap; align-items: flex-start; gap: 10px; }
+  .card-head.ch-stack .ch-main { flex: 1 1 auto; order: 0; min-width: 0; }
+  .card-head.ch-stack .btn { flex: 0 0 auto; align-self: flex-start; }
   .card-head .seg { order: 5; flex: 1 1 100%; }
   .card-head .seg button { flex: 1; }
   .card-head .spacer { display: none; }
