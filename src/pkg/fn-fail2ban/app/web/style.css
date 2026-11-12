@@ -1268,36 +1268,39 @@ td .cell-actions .btn.danger:hover {
 
 /* ------------------------------------------------------------ IP 块 --- */
 
-.ip-list { display: flex; flex-wrap: wrap; gap: 8px; }
+/* 白名单列表：一行一个地址，行尾是删除按钮，行与行之间一条细线。
+   地址用等宽字体并允许在窄屏换行 —— IP / 网段是逐字符读的，
+   折行比截断成省略号更容易核对。 */
+.ip-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.ip-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.ip-row:last-child { border-bottom: 0; }
+.ip-addr {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.ip-row .btn { flex: 0 0 auto; }
 
-.ip-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 4px 0 11px;
-  border-radius: 999px;
-  background: var(--danger-soft);
-  color: var(--danger);
-  font-family: var(--mono);
-  font-size: 12px;
-}
-.ip-chip button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 18px;
-  min-width: 18px;
-  padding: 0 4px;
-  border: 0;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--danger) 18%, transparent);
-  color: inherit;
-  font-size: 11px;
-  line-height: 1;
-  cursor: pointer;
-}
-.ip-chip button:hover { background: color-mix(in srgb, var(--danger) 32%, transparent); }
+/* 输入框 + 添加按钮这一行：输入框吃掉剩余宽度、按钮按内容宽。
+   少了 min-width:0 时输入框会按自身固有宽度占位（约 166px），
+   窄屏上把按钮挤出容器。 */
+[data-chip-add] { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+[data-chip-add] input { flex: 1 1 auto; min-width: 0; }
+[data-chip-add] .btn { flex: 0 0 auto; }
 
 /* ---------------------------------------------------------- 键值清单 --- */
 
@@ -1921,8 +1924,8 @@ details.raw pre {
   .switch-track { width: 46px; height: 26px; flex-basis: 46px; }
   .switch-track::after { width: 20px; height: 20px; }
   .switch-track.on::after { transform: translateX(20px); }
-  .ip-chip { height: 30px; }
-  .ip-chip button { height: 22px; min-width: 22px; }
+  /* 白名单行在手机上加高一点，删除按钮用 .btn.sm 的 32px 触控高度 */
+  .ip-row { padding: 9px 10px; }
 
   .toolbar { gap: 8px; }
   .toolbar .grow { flex: 1 1 100%; }

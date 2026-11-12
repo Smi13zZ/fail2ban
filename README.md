@@ -83,7 +83,7 @@ Server 酱、PushPlus、WxPusher、Telegram、Slack、自定义 Webhook。
 
 ## 版本
 
-当前版本 26.11.37，改动记录见 [CHANGELOG](CHANGELOG.md)，构建与验证流程见
+当前版本 26.11.38，改动记录见 [CHANGELOG](CHANGELOG.md)，构建与验证流程见
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 
 安装包在 [Releases](https://github.com/Smi13zZ/fail2ban/releases/latest) 里下载：
