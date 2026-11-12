@@ -1380,19 +1380,34 @@
     });
   }
 
-  function banToolbarHtml(total, shown) {
-    var sort = state.bans.sort;
-    return '<div class="toolbar">' +
-      '<input type="text" id="banSearch" class="toolbar-search" ' +
+  // 列表侧的三个控件（搜索 / 条数 / 排序）不再自成一行，而是接在顶部那条工具栏里。
+  // 拆成两条时它们各自只占半行，翻页时要上下扫两遍才找得到搜索框或排序方向。
+  function banListToolsHtml(total, shown) {
+    return '<input type="text" id="banSearch" class="toolbar-search ban-search" ' +
       ("placeholder=\"" + t('ban.searchPlaceholder') + "\" value=\"") + esc(state.bans.search) + '">' +
-      '<div class="spacer" style="flex:1"></div>' +
-      '<span class="hint">' + (shown === total ? t('common.count', { n: total })
+      '<span class="hint ban-count">' + (shown === total ? t('common.count', { n: total })
         : t('ban.matched', { shown: shown, total: total })) + '</span>' +
       sortControl('ban', [
         ['ip', t('ban.colIp')],
         ['expires', t('ban.colExpires')]
-      ], sort) +
-      '</div>';
+      ], state.bans.sort);
+  }
+
+  // 顶部工具栏要显示条数，而条数取决于当前视图（单 Jail / 全部汇总）。
+  // 两处的取数方式不同，但都要在渲染工具栏之前算出来，所以单独抽一支。
+  function banCounts() {
+    if (state.bans.jail === BAN_ALL) {
+      var data = state.bans.all;
+      var entries = (data && data.entries) || [];
+      return { total: entries.length, shown: filteredBanRecords().length };
+    }
+    var st = state.bans.status;
+    var ips = (st && st.bannedIps) || [];
+    var jailName = String(state.bans.jail || '');
+    return {
+      total: ips.length,
+      shown: ips.filter(function (ip) { return banSearchHit(ip + ' ' + jailName); }).length
+    };
   }
 
   // 单 Jail 视图的 IP -> {bannedAt, expiresAt} 映射。
@@ -1439,8 +1454,9 @@
       return banSearchHit(item.ip + ' ' + jailName);
     }), state.bans.sort);
 
-    var html = banToolbarHtml(all.length, records.length);
+    // 搜索 / 条数 / 排序已经并进页面顶部那条工具栏，这里直接出卡片。
     // 卡片与标题一起输出：i18n 改写时这里丢掉过 <div class="card"><h3> 前缀
+    var html = '';
     html += ('<div class="card"><h3>' + t('ban.currentList', { shown: records.length, total: all.length })) + "</h3>";
     if (!all.length) {
       html += t('ban.noneBannedInline');
@@ -1514,7 +1530,8 @@
       return !!selected[item.ip];
     });
 
-    var html = banToolbarHtml(entries.length, records.length);
+    // 搜索 / 条数 / 排序已经并进页面顶部那条工具栏
+    var html = '';
     if (picked.length) {
       html += '<div class="toolbar">' +
         t('ban.selectedInline', { n: picked.length }) +
@@ -1592,21 +1609,30 @@
     // 切到具体 Jail 时汇总视图的勾选不再有意义
     if (!all) state.bans.selected = {};
 
-    // 顶部一整行：Jail 选择器 + 手动封禁输入与按钮 + 解封全部。
-    // 「解封全部」是这一页唯一的破坏性操作，推到最右并用淡红描边分开，
-    // 不再让它单独占一行、也不再用它与卡片标题拼成两块。
+    // 整页只有一条工具栏，从左到右：Jail 选择器 → 手动封禁 → 列表的搜索 / 条数 / 排序
+    // → 解封全部。原来拆成上下两条时，搜索框与排序方向在第二行、封禁操作在第一行，
+    // 翻页要上下扫两遍；合成一条后所有动作一次看全。
+    // 「解封全部」是这一页唯一的破坏性操作，推到最右并用淡红描边分开。
     var banTarget = all ? (active.length ? active[0].name : '') : state.bans.jail;
+    var counts = banCounts();
     html += '<div class="toolbar ban-bar">' +
-      '<select id="banJail" style="width:auto;min-width:220px">' +
+      '<div class="ban-main">' +
+      '<select id="banJail" class="ban-jail">' +
       option(BAN_ALL, t('ban.allJailsOption'), state.bans.jail) +
       active.map(function (j) { return option(j.name, j.name, state.bans.jail); }).join('') +
       '</select>' +
-      ("<input type=\"text\" id=\"banIp\" placeholder=\"" + t('ban.manualPlaceholder') + "\">") +
+      ("<input type=\"text\" id=\"banIp\" class=\"ban-ip\" placeholder=\"" + t('ban.manualPlaceholder') + "\">") +
       '<button class="btn primary" data-act="ban" data-name="' + esc(banTarget) + ("\">" + t('common.ban') + "</button>") +
-      '<div class="spacer" style="flex:1"></div>' +
+      '</div>' +
+      '<div class="spacer"></div>' +
+      // 列表侧三个控件与「解封全部」在同一个右对齐组里：
+      // 一行放不下时它们整组换到第二行，第一行只留封禁操作，不会排得七零八落。
+      '<div class="ban-tools">' +
+      banListToolsHtml(counts.total, counts.shown) +
       (all
         ? ("<button class=\"btn unban-all\" data-act=\"unban-all-jails\">" + t('ban.unbanAllJails') + "</button>")
         : '<button class="btn unban-all" data-act="unban-all" data-name="' + esc(state.bans.jail) + ("\">" + t('ban.unbanAll') + "</button>")) +
+      '</div>' +
       '</div>';
 
     html += all ? renderBanSummary(state.bans.all) : renderBanList(state.bans.status);
