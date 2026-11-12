@@ -3317,21 +3317,27 @@
       var repoSlug = (info && info.repo) || 'Smi13zZ/fail2ban';
       releaseUrl = 'https://github.com/' + repoSlug + '/releases';
     }
-    html += '<div class="card">' + cardHead(t('update.title'),
+    // 卡片头：标题与说明叠在一起吃掉左侧宽度，按钮固定在右侧。
+    // 说明不再单独占一行挂在卡片头下面 —— 那样窄屏上它会先折成两行、
+    // 再把按钮顶到下一行，标题区因此散成三块。
+    html += '<div class="card">' +
+      '<div class="card-head ch-stack">' +
+      '<div class="ch-main"><h3>' + esc(t('update.title')) + '</h3>' +
+      '<div class="hint">' + esc(t('update.desc')) + '</div></div>' +
+      '<div class="spacer"></div>' +
       '<a class="btn sm" href="' + esc(releaseUrl) + '" target="_blank" ' +
-      'rel="noopener noreferrer">' + t('update.release') + '</a>') +
-      '<div class="help help-tight">' + esc(t('update.desc')) + '</div>';
+      'rel="noopener noreferrer">' + t('update.release') + '</a></div>';
 
     // 当前 -> 最新
     html += '<div class="vhero">' +
       '<div class="vcol"><div class="vk">' + t('update.current') + '</div>' +
-      '<div class="vv mono">v' + esc(current) + '</div></div>' +
+      '<div class="vv">v' + esc(current) + '</div></div>' +
       '<div class="varrow" aria-hidden="true">' +
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
       'stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>' +
       '</div>' +
       '<div class="vcol"><div class="vk">' + t('update.latest') + '</div>' +
-      '<div class="vv mono' + (hasUpdate ? ' fresh' : '') + '">' +
+      '<div class="vv' + (hasUpdate ? ' fresh' : '') + '">' +
       (latest && latest !== '—' ? 'v' + esc(latest) : '—') + '</div></div>' +
       '</div>';
 
