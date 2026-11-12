@@ -37,6 +37,7 @@
 | 26.11.2 | 212,060 | 面板内图标换成自身资源（修豆腐块） |
 | 26.11.3 | 266,028 | i18n 中英文全量切换、主题图标按钮、删概览标题行、侧栏只留应用名 |
 | 26.11.4 | 291,407 | 新黑白盾牌九档图标、删侧栏品牌行、表格固定列宽、排序独立控件；顺带修 3 个缺陷 |
+| **26.11.44** | **398,462** | 手机端存储页「空间占用」卡片头收成一行（刷新挪到标题右侧） |
 | **26.11.43** | **398,328** | 运行日志区固定露出最新 10 条（fitLogView 按实测行高定高 + 按剩余可视高度封顶），更早在卡片内滚 |
 | **26.11.42** | **398,729** | 通知渠道空态的支持列表居中（新增 .card-note-center，只作用于该处） |
 | **26.11.41** | **398,514** | 通知页三处：通知渠道标题与「添加渠道」同行、投递记录标题与「刷新/清空」同行（筛选另起一行）、空态文案不再劈成两半；清掉 3 条孤儿 i18n 词条 |
@@ -70,8 +71,8 @@
 | **26.11.6** | **365,449** | 设置页重做：侧栏十项收成七项，通知 / 存储 / 更新 / 全局设置合并为一个设置页，页内 8 个分区（面板 / 外观 / 防护策略 / 通知 / 备份 / 存储 / 更新 / 关于），深链 `#settings/<tab>` + 旧地址重定向；新增界面语言 / 侧栏布局 / 表格密度三项服务端偏好；卡片按钮统一 .card-head / .card-foot 排版；备份清单改定宽表 | 
 | **26.11.5** | **357,966** | 通知渠道 7→11 + 元数据驱动 + 密钥打码 + 双语推送 + 投递记录；新增存储页与清理；新增版本检查与一键更新；8 道工程闸门 + CI 打包发布 |
 
-**当前交付**：`output/fn-fail2ban-26.11.43-all.fpk`。**下一个版本号 26.11.44**。
-`report/README-26.11.43.md` 是日志区固定 10 行那一版；`report/README-26.11.42.md` 是支持列表居中那一版；`report/README-26.11.41.md` 是通知页三处收口那一版；`report/README-26.11.40.md` 是白名单圆角与间距那一版；`report/README-26.11.39.md` 是白名单行内编辑那一版；`report/README-26.11.38.md` 是白名单改列表那一版；`report/README-26.11.37.md` 是三按钮一行 + 译文闭合标签那一版；`report/README-26.11.36.md` 是 fn-knock 页两处调整那一版；`report/README-26.11.35.md` 是黑名单表窄屏压垮修复那一版；`report/README-26.11.34.md` 是更新页卡片头与版本号字形那一版；`report/README-26.11.33.md` 是更新页去掉页首说明那一版；`report/README-26.11.32.md` 是抽屉从屏幕顶端起算那一版；`report/README-26.11.31.md` 是手机端状态指示与抽屉尺寸收口那一版；`report/README-26.11.30.md` 是手机端顶栏收成一行那一版；`report/README-26.11.29.md` 是 Jail 页顶部收成一行那一版；`report/README-26.11.28.md` 是封禁页工具栏合成一条那一版；`report/README-26.11.27.md` 是日志工具栏合成一行那一版；`report/README-26.11.26.md` 是日志页行序与工具栏那一版；`report/README-26.11.25.md` 是 fn-knock 标签条那一版；`report/README-26.11.24.md` 是两表统一那一版；`report/README-26.11.23.md` 是 Jail 表列宽那一版；`report/README-26.11.22.md` 是滚动条与按钮高度那一版；`report/README-26.11.21.md` 是备份恢复那一版；`report/README-26.11.20.md` 是界面收口那一版（26.11.19 只是它的前一步收尾）；`report/README-26.11.17.md` 是一键升级那一版；`report/README-26.11.10.md` 是更新页那一版；`report/README-26.11.9.md` 是上一版；`report/README-26.11.7.md` 是侧栏左下角那一版；`report/README-26.11.6.md` 是设置页重做的说明，`report/SPEC-26.11.6-设置页重构.md` 是对应的施工图；26.11.5 的说明与施工图在 `report/README-26.11.5.md`、`report/UPGRADE-PLAN-26.11.5.md`。
+**当前交付**：`output/fn-fail2ban-26.11.44-all.fpk`。**下一个版本号 26.11.45**。
+`report/README-26.11.44.md` 是存储页刷新按钮同行那一版；`report/README-26.11.43.md` 是日志区固定 10 行那一版；`report/README-26.11.42.md` 是支持列表居中那一版；`report/README-26.11.41.md` 是通知页三处收口那一版；`report/README-26.11.40.md` 是白名单圆角与间距那一版；`report/README-26.11.39.md` 是白名单行内编辑那一版；`report/README-26.11.38.md` 是白名单改列表那一版；`report/README-26.11.37.md` 是三按钮一行 + 译文闭合标签那一版；`report/README-26.11.36.md` 是 fn-knock 页两处调整那一版；`report/README-26.11.35.md` 是黑名单表窄屏压垮修复那一版；`report/README-26.11.34.md` 是更新页卡片头与版本号字形那一版；`report/README-26.11.33.md` 是更新页去掉页首说明那一版；`report/README-26.11.32.md` 是抽屉从屏幕顶端起算那一版；`report/README-26.11.31.md` 是手机端状态指示与抽屉尺寸收口那一版；`report/README-26.11.30.md` 是手机端顶栏收成一行那一版；`report/README-26.11.29.md` 是 Jail 页顶部收成一行那一版；`report/README-26.11.28.md` 是封禁页工具栏合成一条那一版；`report/README-26.11.27.md` 是日志工具栏合成一行那一版；`report/README-26.11.26.md` 是日志页行序与工具栏那一版；`report/README-26.11.25.md` 是 fn-knock 标签条那一版；`report/README-26.11.24.md` 是两表统一那一版；`report/README-26.11.23.md` 是 Jail 表列宽那一版；`report/README-26.11.22.md` 是滚动条与按钮高度那一版；`report/README-26.11.21.md` 是备份恢复那一版；`report/README-26.11.20.md` 是界面收口那一版（26.11.19 只是它的前一步收尾）；`report/README-26.11.17.md` 是一键升级那一版；`report/README-26.11.10.md` 是更新页那一版；`report/README-26.11.9.md` 是上一版；`report/README-26.11.7.md` 是侧栏左下角那一版；`report/README-26.11.6.md` 是设置页重做的说明，`report/SPEC-26.11.6-设置页重构.md` 是对应的施工图；26.11.5 的说明与施工图在 `report/README-26.11.5.md`、`report/UPGRADE-PLAN-26.11.5.md`。
 
 ## 四、包结构与构建
 
