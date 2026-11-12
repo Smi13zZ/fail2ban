@@ -2205,8 +2205,10 @@
   /* ------------------------------------------------- 设置页各分区 */
 
   // 卡片底部动作条：主按钮在最右、危险按钮在最左，只有一个按钮时也靠右。
-  function cardFoot(buttons) {
-    return '<div class="card-foot"><div class="spacer"></div>' + (buttons || '') + '</div>';
+  // extra 是附加类名，用于个别动作条的特殊排布（如 foot-3）。
+  function cardFoot(buttons, extra) {
+    return '<div class="card-foot' + (extra ? ' ' + extra : '') +
+      '"><div class="spacer"></div>' + (buttons || '') + '</div>';
   }
 
   // 卡片标题行 + 行内动作（如「立即备份」「新增渠道」）。
@@ -4065,10 +4067,13 @@
       '<div class="field"><label>' + t('fnk.ipLabel') + '</label>' +
       '<input type="text" id="fnkManualIps" placeholder="' + esc(t('fnk.manualIpsPlaceholder')) + '">' +
       '<div class="help">' + esc(t('fnk.loopbackNote1')) + esc(t('fnk.loopbackNote2b')) + '</div></div>' +
+      // 三颗按钮在中文界面排成一行（见 .foot-3）；英文标签最长 27 字符，
+      // 均分后放不下，仍按原来的两行折行。
       cardFoot(
         '<button class="btn" data-act="fnk-push-all">' + t('fnk.pushAll') + '</button>' +
         '<button class="btn" data-act="fnk-push">' + t('fnk.addToBlacklist') + '</button>' +
-        '<button class="btn danger" data-act="fnk-remove">' + t('fnk.removeFromBlacklist') + '</button>') +
+        '<button class="btn danger" data-act="fnk-remove">' + t('fnk.removeFromBlacklist') + '</button>',
+        'foot-3') +
       '</div>';
   }
 

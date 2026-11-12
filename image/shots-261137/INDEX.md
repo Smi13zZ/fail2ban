@@ -1,6 +1,6 @@
-# 截图索引（面板 26.11.36）
+# 截图索引（面板 26.11.37）
 
-- 生成时间：2026-11-12 14:01:19
+- 生成时间：2026-11-12 14:29:39
 - 面板地址：http://127.0.0.1:18752/
 - 浏览器：Chrome/156.0.8078.79（CDP 直连，不走 --screenshot）
 - 主题：跟随系统（此环境解出浅色） ／ 语言：zh
@@ -47,7 +47,7 @@
 | `mobile-filters.png` | 过滤器 | 780×1688 | 过滤器：2 张卡片、2 处空状态、5 个按钮、侧栏 7 项、标题：过滤器列表（0） / 过滤器详情 | — |
 | `mobile-fnknock.png` | fn-knock 联动 | 780×2168 | fn-knock 联动：3 张卡片、10 个按钮、侧栏 7 项、标题：封禁方式 / 当前生效动作 / 生效原理 | — |
 | `mobile-fnknock-mode.png` | fnknock · mode | 780×2168 | fn-knock 联动：3 张卡片、10 个按钮、侧栏 7 项、标题：封禁方式 / 当前生效动作 / 生效原理 | — |
-| `mobile-fnknock-sync.png` | fnknock · sync | 780×2138 | fn-knock 联动：2 张卡片、13 个按钮、侧栏 7 项、标题：黑名单同步 / 手动处理 | — |
+| `mobile-fnknock-sync.png` | fnknock · sync | 780×2046 | fn-knock 联动：2 张卡片、13 个按钮、侧栏 7 项、标题：黑名单同步 / 手动处理 | — |
 | `mobile-fnknock-conn.png` | fnknock · conn | 780×1912 | fn-knock 联动：1 张卡片、9 个按钮、侧栏 7 项、标题：敲门连接 | — |
 | `mobile-fnknock-status.png` | fnknock · status | 780×1688 | fn-knock 联动：1 张卡片、9 个按钮、侧栏 7 项、标题：探测状态 | — |
 | `mobile-fnknock-list.png` | fnknock · list | 780×1688 | fn-knock 联动：1 张卡片、1 处空状态、9 个按钮、侧栏 7 项、标题：敲门黑名单 | 控制台 1 条 |
@@ -91,7 +91,7 @@
 
 ### 更新页版本对比箭头（desktop）
 
-- 两个版本号：v26.11.36 → v26.11.36
+- 两个版本号：v26.11.37 → v26.11.37
 - 箭头容器：20×20，display=flex；内层 svg：20×20
 - 落点是否在两个版本号之间：是
 
