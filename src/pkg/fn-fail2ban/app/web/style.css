@@ -408,6 +408,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   white-space: nowrap;
 }
 .topbar .tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+/* 状态徽章是顶栏里唯一「有则显示完整」的固定元素：窄屏下它让位给操作按钮，
+   但绝不被压缩成一点内容都看不见的窄条。 */
+.topbar .badge { flex: 0 0 auto; }
 
 /* 主区域不设宽度上限：宽度由 .app 的 flex 布局自然算出
    （视口 − 侧栏 − 左右内边距）。给 max-width 会让宽屏上内容缩成中间一窄条、
@@ -1780,19 +1783,59 @@ details.raw pre {
   }
   .scrim.open { opacity: 1; pointer-events: auto; }
 
-  .topbar { padding: 10px 12px; min-height: 52px; flex-wrap: wrap; row-gap: 8px; }
-  .page-head h1, .page-title { font-size: 14px; }
-  /* 390px 一排放不下「标题 + 状态徽标 + 两个按钮」：让工具组整体折到第二行并靠右，
-     比让按钮在半行处挤成两截好看，也不会把标题压成竖排。 */
-  .topbar .tools {
-    flex: 0 0 100%;
-    justify-content: flex-end;
-    order: 3;
-    margin-left: 0;
+  /* 顶栏收成一行：菜单 / 标题 / 状态圆点 / 操作按钮，全部横向排布。
+     整行只有一个可压缩项（标题，超出按省略号收尾），其余按内容宽度固定，
+     所以窄到 320px 也是压标题而不是折行——折行后按钮会单独占掉一整行高度，
+     页面还得跟着往下让位。 */
+  .topbar {
+    padding: 10px 12px;
+    min-height: 52px;
+    flex-wrap: nowrap;
+    gap: 8px;
   }
-  .topbar .tools .btn { height: 34px; }
+  /* 标题与徽章之间的弹性空隙在单行布局里是多余的：标题自己就是弹性项，
+     再留一个 flex:1 的空隙会把可用宽度对半分，标题提前变成省略号。 */
+  .topbar > .spacer { display: none; }
+  /* 菜单键去掉描边与底色，只留三条线：它左边就是屏幕边缘，
+     再套一圈边框会显得像被推挤出来的第二个按钮。 */
+  .topbar #menuToggle {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+    margin-left: -6px;
+    border-color: transparent;
+    background: transparent;
+    color: var(--text);
+  }
   .page-head { flex: 1 1 auto; min-width: 0; }
-  .page-head h1, .page-title { overflow: hidden; text-overflow: ellipsis; }
+  .page-head h1, .page-title {
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .topbar .tools {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    order: 0;
+    margin-left: 0;
+    gap: 6px;
+  }
+  .topbar .tools .btn { height: 34px; padding: 0 10px; }
+  /* 状态徽章收成一个圆点：窄屏没有放「运行中 / 已停止」这几个字的位置，
+     颜色本身已经说明状态（绿=运行、橙=停止、红=未安装）。只收掉文字那层，
+     圆点保留，徽章退化成与右侧按钮同尺寸的圆形状态灯。 */
+  .topbar .badge {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    justify-content: center;
+    gap: 0;
+    padding: 0;
+    border-radius: 50%;
+  }
+  .topbar .badge .badge-text { display: none; }
+  .topbar .badge .dot { width: 9px; height: 9px; flex-basis: 9px; }
   main { padding: 14px 12px 40px; }
 
   /* 触摸屏上 36px 的行高太窄：侧栏抽屉里的导航项按 44px 触控目标走 */

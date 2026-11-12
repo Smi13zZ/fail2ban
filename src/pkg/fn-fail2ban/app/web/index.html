@@ -97,8 +97,12 @@
       </div>
       <div class="spacer" style="flex:1"></div>
       <!-- 服务状态徽章靠右，与「重载配置 / 刷新」排在一起：'
-           它描述的是整个面板的状态，不是当前页面的标题修饰。 -->
-      <span class="badge muted" id="svcBadge" role="status" aria-live="polite" data-i18n="dash.checking">检测中…</span>
+           它描述的是整个面板的状态，不是当前页面的标题修饰。
+           文案单独包一层 .badge-text：窄屏把这个 span 收成圆点，圆点本身要留着，
+           而 data-i18n 回填的是 textContent，包一层才不会被整块替换掉。 -->
+      <span class="badge muted" id="svcBadge" role="status" aria-live="polite">
+        <span class="dot"></span><span class="badge-text" data-i18n="dash.checking">检测中…</span>
+      </span>
       <div class="tools">
         <button class="btn sm" id="btnReload" title="重新读取配置并生效" data-i18n="common.reload">重载配置</button>
         <button class="btn sm" id="btnRefresh" data-i18n="common.refresh">刷新</button>
