@@ -827,19 +827,28 @@
     });
   }
 
+  // 徽章的结构固定成「圆点 + 文字」两层，只改这两层的内容与类名：
+  // 窄屏正是靠保留圆点、把文字那层收掉来把徽章压成一个状态点的，
+  // 所以这里不能再用 innerHTML 整个重写真个徽章的内部结构。
   function updateBadge() {
     var badge = $('#svcBadge');
     var info = state.overview && state.overview.fail2ban;
     if (!info) return;
+    var text = $('#svcBadge .badge-text');
+    var dot = $('#svcBadge .dot');
+    if (!badge || !text || !dot) return;
     if (!info.installed) {
       badge.className = 'badge danger';
-      badge.textContent = t('common.notInstalled');
+      dot.className = 'dot err';
+      text.textContent = t('common.notInstalled');
     } else if (info.running) {
       badge.className = 'badge ok';
-      badge.innerHTML = ("<span class=\"dot\"></span> " + t('jail.scopeActive'));
+      dot.className = 'dot on';
+      text.textContent = t('jail.scopeActive');
     } else {
       badge.className = 'badge warn';
-      badge.innerHTML = ("<span class=\"dot\"></span> " + t('common.stopped'));
+      dot.className = 'dot warn';
+      text.textContent = t('common.stopped');
     }
     var navBadge = $('#navBanCount');
     var summary = state.overview.summary;
@@ -5482,6 +5491,10 @@
   function repaintForLang() {
     paintLangTag();
     paintStaticI18n();
+    // 徽章文字带 data-i18n（服务状态还没取到时显示「检测中…」），
+    // 静态回填会把它改回「检测中…」，所以取到过状态时要再按状态重刷一次，
+    // 否则切个语言，徽章上写的「运行中」就变回「检测中…」了。
+    updateBadge();
     paintPageTitle();
     applySidebarPref((state.prefs && state.prefs.sidebar) || 'auto');
     applyTheme(currentTheme());
