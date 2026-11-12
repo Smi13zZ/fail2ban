@@ -859,6 +859,29 @@ table.fixed td.c-filter { text-overflow: ellipsis; }
   background: var(--danger-soft);
   border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
 }
+/* ---------------------------------------------------------- Jail 页工具栏 --- */
+
+/* 顶部一行放完：搜索、作用域、条数、新建 Jail。
+   搜索框与作用域可以收窄（各有下限），条数与按钮不参与压缩。 */
+.toolbar.jail-bar { flex-wrap: nowrap; gap: 8px; }
+.toolbar.jail-bar > .spacer { flex: 1 1 0; min-width: 0; }
+
+/* 搜索框：240px 是舒适宽度，窄了收到 120px，内容按省略号收尾。
+   选择器带 .toolbar.jail-bar 前缀是为了盖掉基类的 width:240px 与
+   默认 min-width:auto —— 后者会把下限卡在 input 的内在宽度上，不肯缩。 */
+.toolbar.jail-bar .jail-search {
+  flex: 0 1 240px;
+  width: auto;
+  min-width: 120px;
+  max-width: 240px;
+  text-overflow: ellipsis;
+}
+/* 作用域下拉：内容固定（已启用 / 运行中 / 已接管 / 全部），不需要收窄 */
+.toolbar.jail-bar .jail-scope { flex: 0 0 auto; width: auto; }
+/* 条数文字不压缩：它是「当前筛选出几条」的唯一提示 */
+.toolbar.jail-bar .jail-count { flex: 0 0 auto; white-space: nowrap; }
+.toolbar.jail-bar > .btn { flex: 0 0 auto; }
+
 /* ---------------------------------------------------------- 封禁页工具栏 --- */
 
 /* 整页一条工具栏，八个控件：Jail 选择器 / 手动封禁输入 / 封禁 /
@@ -2910,6 +2933,15 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
      关键字独占一整行，行数 / 导出 / 刷新 / 自动刷新宽度加起来放得下，留在最后一行。 */
   .toolbar.log-bar { flex-wrap: wrap; }
   .log-tools { flex-wrap: wrap; gap: 8px; }
+
+  /* Jail 页那条工具栏同理：搜索 + 作用域 + 条数 + 新建在 390px 下放不进一行，
+     拆成「搜索框独占一行 / 作用域与条数 / 新建 Jail 拉满整行」三段。 */
+  .toolbar.jail-bar { flex-wrap: wrap; row-gap: 8px; }
+  .toolbar.jail-bar > .spacer { display: none; }
+  .toolbar.jail-bar .jail-search { flex: 1 1 100%; max-width: none; }
+  .toolbar.jail-bar .jail-scope { flex: 0 0 auto; }
+  .toolbar.jail-bar .jail-count { flex: 0 0 auto; }
+  .toolbar.jail-bar > .btn { flex: 1 1 100%; }
 
   /* 封禁页那条工具栏同理：八个控件在 390px 下放不进一行，
      改成三段：封禁操作一行、搜索框独占一行、条数与排序动作一行。
