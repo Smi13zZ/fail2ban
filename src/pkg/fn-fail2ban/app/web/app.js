@@ -2861,7 +2861,10 @@
       });
       html += '</div>';
     }
-    html += '<div class="card-note">' + esc(t('notify.channelsSupported')) + '</div>' +
+    // 支持列表这句是空态下半部分，居中与上面的「还没有配置通知渠道。」对齐；
+    // 有渠道时它就是普通的卡片脚注，也跟着居中，不影响读数。
+    html += '<div class="card-note card-note-center">' +
+      esc(t('notify.channelsSupported')) + '</div>' +
       '</div>';
 
     // 投递记录
