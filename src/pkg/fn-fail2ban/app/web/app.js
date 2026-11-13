@@ -107,8 +107,11 @@
     fnkOpts: { page: 1, limit: 20, search: '' },
     // 与敲门的联动拆成六块，一次只看一块（mode | sync | conn | status | list | log）
     fnkTab: 'mode',
-    // 投递记录：status 是筛选条件（all | ok | fail），data 是接口返回的 {items,total,kept}
-    deliv: { status: 'all', data: null },
+    // 通知分区：接口原样返回；testing 是正在发测试消息的渠道 id（空串表示没有）
+    notifications: null,
+    // 投递记录：status 是筛选条件（all | ok | fail），data 是接口返回的
+    // {items, total, kept, max}
+    deliv: { status: 'all', data: null, resetScroll: false },
     // 存储页：report 是 /api/storage 的原样返回
     storage: null,
     // 设置页当前分区（panel | appearance | policy | notify | backup | storage | update | about）
@@ -552,14 +555,14 @@
     repaintForLang();
   }
 
-  // 通知分区红点：通知里有失败投递时提醒一下
+  // 通知分区红点：有失败投递时提醒一下。
+  // 条数取自后端的 fail（按全部记录统计），不能就地数 payload.items ——
+  // 那是当前筛选下的前若干条，切到「成功」时会数出 0，红点就自己灭了。
   function paintNotifyDot() {
     var dot = $('#setNotifyDot');
     if (!dot) return;
     var payload = deliveryPayload();
-    var items = (payload && payload.items) || [];
-    var failed = items.filter(function (item) { return item.ok === false; }).length;
-    dot.hidden = failed === 0;
+    dot.hidden = !(payload && Number(payload.fail));
   }
 
   function openSidebar() {
@@ -2240,8 +2243,12 @@
     if (tab === 'policy' || tab === 'about') {
       needSettings();
     } else if (tab === 'notify') {
+      // 记录单独取一遍：/api/notifications 里那份是「全部 + 60 条」的固定快照，
+      // 列表却是按当前筛选（可能是「失败」）取更长的，两者不能混用。
       tasks.push(api('notifications').then(function (d) {
         state.notifications = d;
+        // 失败投递的红点跟着这份数据走，重新取到就要重算一次
+        paintNotifyDot();
         restartBrowserNotify();
       }), loadDeliveries());
     } else if (tab === 'maint') {
@@ -2270,12 +2277,41 @@
     return tasks;
   }
 
+  // 重绘前把两处滚动位置抄下来：整数滚动条（页面本身）与卡片内的滚动盒
+  // （投递记录只露 5 条，翻到下面再被弹回顶端就很难用）。
+  function capturePanelScroll() {
+    var box = $('#view .nlog');
+    // 换筛选后列表里是另一批记录，沿用旧位置会停在毫无意义的地方 ——
+    // 标记一下，这一次重绘后回到顶端。
+    var top = (box && !state.deliv.resetScroll) ? box.scrollTop : 0;
+    state.deliv.resetScroll = false;
+    return {
+      top: top,
+      page: window.scrollY || document.documentElement.scrollTop || 0
+    };
+  }
+
+  function restorePanelScroll(saved) {
+    if (!saved) return;
+    // 先按新内容定高度，再补滚动位置 —— 顺序反了 scrollTop 会被夹到旧的上限
+    fitDeliveries();
+    watchDeliveryFit();
+    var box = $('#view .nlog');
+    if (box && saved.top) box.scrollTop = saved.top;
+    if (saved.page) window.scrollTo(0, saved.page);
+  }
+
   // 一次只展开一个分区，用顶部标签条切换。
   function renderSettings() {
     var host = $('#view');
+    // 重绘会把整块 DOM 换掉，滚动位置随之丢失。通知分区的投递记录是一个
+    // 「只露 5 条」的滚动盒，翻到下面几条时被任何一次重绘弹回顶端都很难用，
+    // 所以按分区把 scrollTop 记下来、画完再放回去。
+    var keepScroll = capturePanelScroll();
     var html = settingsWorkbarHtml();
     html += '<div id="setPanel">' + settingsTabHtml(state.setTab) + '</div>';
     host.innerHTML = html;
+    restorePanelScroll(keepScroll);
     paintUpdateDot();
     paintNotifyDot();
     paintUpdateBanner();
@@ -2655,45 +2691,6 @@
     }).join('');
   }
 
-  // 摘要只用来区分渠道，密钥字段一律不显示：GET 回传的掩码绝不能漏到界面上
-  function channelSummary(channel) {
-    var shown = function (value) {
-      var text = String(value === undefined || value === null ? '' : value).trim();
-      return (text && text !== SECRET_MARK && text !== 'true') ? text : '';
-    };
-    if (channel.type === 'wecom_app') {
-      var parts = [];
-      var corpid = shown(channel.corpid);
-      if (corpid) parts.push(corpid.slice(0, 8) + '…');
-      var agentid = shown(channel.agentid);
-      if (agentid) parts.push('AgentId ' + agentid);
-      var touser = shown(channel.touser);
-      if (touser) parts.push(t('notify.receivePrefix') + ' ' + touser);
-      return parts.join(' · ') || t('common.notSet');
-    }
-    if (channel.type === 'telegram') {
-      var chat = shown(channel.chatId);
-      return chat ? 'Chat ' + chat : t('common.notSet');
-    }
-    if (channel.type === 'wxpusher') {
-      // 后端字段名是 uids / topics（多个用逗号分隔）
-      var uids = shown(channel.uids);
-      if (uids) return 'UID ' + uids.slice(0, 12) + '…';
-      var topics = shown(channel.topics);
-      return topics ? 'Topic ' + topics : t('common.notSet');
-    }
-    var url = shown(channel.url) || shown(channel.apiBase);
-    if (url) return shortenUrl(url);
-    // 地址本身就是密钥（如 Bark key、Webhook）：掩码说明已经保存，不能显示成「未填写」
-    if (channel.url === SECRET_MARK || channel.apiBase === SECRET_MARK) return t('notify.secretSet');
-    return t('common.notFilled');
-  }
-
-  function shortenUrl(url) {
-    url = String(url || '');
-    return url.length > 52 ? url.slice(0, 30) + '…' + url.slice(-18) : url;
-  }
-
   // 开关统一用真正的 <button role="switch">：Tab 可达、Enter/Space 可切换、读屏能读出开关状态
   function switchToggle(attr, key, checked, label) {
     return '<button type="button" class="switch-track' + (checked ? ' on' : '') + '"' +
@@ -2732,23 +2729,25 @@
 
   /* ------------------------------------------------------- 投递记录 */
 
+  // 投递记录固定露出 5 条，其余在卡片里滚动。行高随正文行数与失败原因变化，
+  // 所以按真实高度量（fitDeliveries）；写死 max-height 必定会在某一行中间切开。
+  var DELIV_ROWS = 5;
+  var DELIV_GAP = 8;
+  var delivFitHandler = null;
+
   // 投递记录的事件名是后端的 ASCII 标识，界面按当前语言渲染
   var DELIVERY_EVENT_KEYS = {
     ban: 'notify.dvBan',
     unban: 'notify.dvUnban',
     serviceDown: 'notify.dvServiceDown',
     serviceRecover: 'notify.dvServiceRecover',
+    update: 'notify.dvUpdate',
     test: 'notify.dvTest'
   };
 
   function deliveryEventLabel(event) {
     var key = DELIVERY_EVENT_KEYS[event];
     return key ? t(key) : t('notify.dvOther');
-  }
-
-  // 通知历史里后端下发的 type 也是同样五个 ASCII 值
-  function eventTypeLabel(type) {
-    return deliveryEventLabel(type);
   }
 
   // 推送正文是「中文 / English」与「中文段 + 空行 + 英文段」的中英双语文本。
@@ -2768,7 +2767,12 @@
     if (!seconds) return '—';
     // 后端给的是 epoch 秒；万一某处给了毫秒也别显示成 1970 年
     if (seconds > 1e11) seconds = Math.floor(seconds / 1000);
-    return fmtTime(seconds);
+    // 精确到分钟：投递记录是一排流水，秒位只是噪音，多出来的宽度留给标题
+    var d = new Date(seconds * 1000);
+    if (isNaN(d.getTime())) return '—';
+    var p = function (n) { return n < 10 ? '0' + n : '' + n; };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+      ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
   }
 
   function deliveryPayload() {
@@ -2778,69 +2782,110 @@
     return (data.items ? data : { items: data, total: data.length, kept: data.length });
   }
 
+  // 一条记录一行：结果药丸 → 标题 + 事件标签 → 正文（最多三行）→ 渠道与时间。
+  // 失败行额外把原因单列一段：投递失败时「为什么」比「什么时候」有用得多。
   function deliveryRowHtml(item) {
     var ok = item.ok !== false;
-    var typeMeta = channelTypeMeta(item.type);
-    var channel = item.channel || item.channel_id || t('common.unnamed');
-    var detail = String(item.detail || '');
-    var html = '<div class="deliv-row' + (ok ? '' : ' fail') + '">' +
-      '<span class="dot' + (ok ? ' on' : ' err') + '"></span>' +
-      '<div class="deliv-body">' +
-      '<div class="deliv-title">' + esc(channel) +
-      (item.type ? ' <span class="chip">' + esc(channelTypeLabel(typeMeta)) + '</span>' : '') +
+    var title = bilingualPick(item.title) || t('notify.delivUntitled');
+    var body = bilingualPick(item.body);
+    var channel = String(item.channel || '').trim() || t('common.unnamed');
+    var detail = String(item.detail || '').trim();
+    var html = '<div class="nlogrow">' +
+      '<span class="nlogstate ' + (ok ? 'ok' : 'err') + '">' +
+      esc(ok ? t('notify.delivOkBadge') : t('notify.delivFailBadge')) + '</span>' +
+      '<div class="nlogin">' +
+      '<div class="nlogtop">' +
+      '<span class="nlogtitle ellipsis">' + esc(title) + '</span>' +
+      '<span class="nlogtag">' + esc(deliveryEventLabel(item.event)) + '</span>' +
       '</div>' +
-      '<div class="deliv-meta">' +
-      '<span>' + esc(deliveryEventLabel(item.event)) + '</span>' +
-      '<span>' + esc(ok ? t('notify.delivOkBadge') : t('notify.delivFailBadge')) + '</span>' +
-      '</div>';
-    if (detail) {
-      html += '<div class="deliv-detail">' +
-        (ok ? '' : esc(t('notify.delivReason')) + ': ') + esc(detail) + '</div>';
-    }
-    html += '</div>' +
-      '<span class="deliv-time">' + esc(deliveryTime(item.at)) + '</span>' +
-      '</div>';
+      (body ? '<div class="nlogbody">' + esc(body) + '</div>' : '') +
+      '<div class="nlogmeta">' +
+      '<span class="ellipsis">' + esc(channel) + '</span>' +
+      '<span class="sep">·</span>' +
+      '<span>' + esc(deliveryTime(item.at)) + '</span>' +
+      '</div>' +
+      (!ok && detail ? '<div class="nlogerr">' + esc(detail) + '</div>' : '') +
+      '</div></div>';
     return html;
   }
 
   function deliveryCardHtml() {
-    var payload = deliveryPayload() || { items: [], total: 0, kept: 0 };
+    var payload = deliveryPayload() || { items: [], total: 0, kept: 0, max: 0 };
     var items = payload.items || [];
-    // 卡片头一行放「标题 → 筛选分段 → 刷新 → 清空」：四个都在同一条 flex 上，
-    // 筛选不再单独占一行，刷新与清空也不再掉到卡片底部去。
-    // 卡片头：「投递记录 …… 刷新 / 清空记录」同行（.ch-inline）。
-    // 筛选分段单独一行放在下面：三个按钮加两个动作按钮挤在 390px 的一行里
-    // 会被压成短短几截，标题也因此被挤到第二行去。
-    var html = '<div class="card">' + cardHead(t('notify.delivTitle'),
-      '<button class="btn sm" data-act="deliv-refresh">' + t('common.refresh') + '</button>' +
-      '<button class="btn sm danger" data-act="deliv-clear">' + t('notify.delivClear') + '</button>',
-      'ch-inline') +
-      '<div class="deliv-bar">' +
-      '<div class="seg">' +
-      [['all', 'notify.delivFilterAll'], ['ok', 'notify.delivFilterOk'], ['fail', 'notify.delivFilterFail']]
-        .map(function (pair) {
-          return '<button type="button" data-act="deliv-filter" data-status="' + pair[0] + '"' +
-            (state.deliv.status === pair[0] ? ' class="on"' : '') + '>' +
-            t(pair[1]) + '</button>';
-        }).join('') +
-      '</div></div>' +
-      '<p class="dim card-desc">' + esc(t('notify.delivHint')) +
-      (payload.kept ? ' ' + esc(t('notify.delivKept', { n: payload.kept })) : '') +
-      '</p>';
+    // 失败条数由后端按「全部记录」统计：切到「成功」筛选时手上一个失败记录
+    // 都没有，若就地数一遍会得到 0，看起来像从来没失败过。
+    var failed = Number(payload.fail) || 0;
+    var max = Number(payload.max) || 0;
+    // 卡片头一行放「标题 → 筛选 → 刷新 → 清空」：桌面端四个在同一条 flex 上；
+    // 窄屏下筛选（.seg）按 .card-head .seg 的既有规则独占第二行，
+    // 刷新与清空留在标题那一行 —— 三个筛选加两个动作挤在 390px 里会被压成
+    // 短短的几截，标题也会被顶到第二行去。
+    var html = '<div class="card">' +
+      cardHead(t('notify.delivTitle'),
+        '<div class="seg">' +
+        [['all', 'notify.delivFilterAll'], ['ok', 'notify.delivFilterOk'], ['fail', 'notify.delivFilterFail']]
+          .map(function (pair) {
+            var label = t(pair[1]);
+            var badge = (pair[0] === 'fail' && failed)
+              ? '<span class="nlogbadge">' + failed + '</span>' : '';
+            return '<button type="button" data-act="deliv-filter" data-status="' + pair[0] + '"' +
+              (state.deliv.status === pair[0] ? ' class="on"' : '') + '>' + label + badge + '</button>';
+          }).join('') +
+        '</div>' +
+        '<button class="btn sm" data-act="deliv-refresh">' + t('common.refresh') + '</button>' +
+        // 「清空」清的是全部记录（不只是当前筛选下这几条），所以禁用条件看
+        // 「一共还有没有记录」—— kept 是环形缓冲里的总条数。
+        '<button class="btn sm danger" data-act="deliv-clear"' +
+        (Number(payload.kept) ? '' : ' disabled') + '>' + t('notify.delivClear') + '</button>',
+        'nlog-head') +
+      '<p class="dim card-desc">' +
+      esc(max ? t('notify.delivHint', { n: max }) : t('notify.delivHintNoMax')) + '</p>';
 
     if (!items.length) {
       html += '<div class="empty">' + t('notify.delivEmpty') + '</div>';
     } else {
-      html += '<div class="deliv-list">' + items.map(deliveryRowHtml).join('') + '</div>';
+      // 只露 5 条，其余在这里滚动；高度由 fitDeliveries() 事后量出来写死
+      html += '<div class="nlog">' + items.map(deliveryRowHtml).join('') + '</div>';
     }
-    return html + '</div>';
+    html += '<div class="hint">' + esc(t('notify.delivNote')) + '</div></div>';
+    return html;
+  }
+
+  // 把列表高度锁在前 5 行的实际高度上，多余的在卡片内滚动。
+  // 行高不是常数（正文行数、原因长短都会变），所以必须实测，不能按行数乘。
+  function fitDeliveries() {
+    var box = $('#view .nlog');
+    if (!box) return;
+    box.style.maxHeight = 'none';
+    var rows = box.children;
+    if (!rows.length) return;
+    var shown = Math.min(rows.length, DELIV_ROWS);
+    var height = 0;
+    for (var i = 0; i < shown; i++) height += rows[i].getBoundingClientRect().height;
+    height += DELIV_GAP * (shown - 1);
+    box.style.maxHeight = Math.ceil(height) + 'px';
+  }
+
+  function watchDeliveryFit() {
+    if (delivFitHandler) window.removeEventListener('resize', delivFitHandler);
+    // 转屏 / 拉窗口后一条记录的正文可能换行数，量出来的高度要跟着重算
+    delivFitHandler = function () { fitDeliveries(); };
+    window.addEventListener('resize', delivFitHandler);
   }
 
   function loadDeliveries() {
     var status = state.deliv.status || 'all';
-    return api('notifications/deliveries?status=' + encodeURIComponent(status) + '&limit=60')
+    return api('notifications/deliveries?status=' + encodeURIComponent(status) + '&limit=120')
       .then(function (data) { state.deliv.data = data; })
       .catch(function () { /* 记录接口不可用不影响通知页其它部分 */ });
+  }
+
+  // 任何一次「刚发过推送」之后都要重新读一遍记录：测试按钮、渠道保存后
+  // 只弹 toast 不刷列表，用户看到的永远是点测试之前的那份快照。
+  function refreshDeliveries() {
+    return loadDeliveries().then(function () {
+      if (inSettingsTab('notify')) renderSettings();
+    });
   }
 
   /* ---------------------------------------------------------- 通知设置 */
@@ -2912,32 +2957,34 @@
         : '<span class="badge warn">' + t('notify.pollDisabled') + '</span>') +
       '</dl></div>';
 
-    // 通知渠道：标题与「添加渠道」在手机上也同一行（.ch-inline）。
-    // 支持哪些类型这句说明统一放到卡片底部，空态只留图标 + 一句「还没有配置」，
-    // 原先的空态里塞了半句、底部再塞后半句，中间隔着整片空白。
+    // 通知渠道：标题与「添加渠道」同一行（.ch-inline），窄屏也不拆行。
+    // 一条渠道一行：左侧圆形铃铛 + 名称与「类型 · 状态」+ 右侧三个动作；
+    // 名称单行省略，状态是纯文字（不是徽章）—— 徽章在 13px 的行里比文字还显眼，
+    // 而「已启用 / 已停用」只是这一行的注脚。
     html += '<div class="card">' + cardHead(t('notify.channelsTitle'),
       '<button class="btn sm primary" data-act="channel-new">' +
       t('notify.addChannel') + '</button>', 'ch-inline');
     if (!s.channels.length) {
       html += '<div class="empty channels-empty">' +
         '<span class="empty-ic">' + BELL_ICON + '</span>' +
-        esc(t('notify.channelsEmptyShort')) +
+        esc(t('notify.channelsEmpty')) +
         '</div>';
     } else {
       html += '<div class="chlist">';
       s.channels.forEach(function (channel) {
         var typeLabel = channelTypeLabel(channelTypeMeta(channel.type));
+        var testing = state.notifications.testing === channel.id;
         html += '<div class="chrow' + (channel.enabled ? '' : ' off') + '">' +
           '<span class="chico">' + BELL_ICON + '</span>' +
           '<div class="chin">' +
-          '<div class="chname">' + esc(channel.name || t('common.unnamed')) + '</div>' +
+          '<div class="chname ellipsis">' + esc(channel.name || t('common.unnamed')) + '</div>' +
           '<div class="chmeta">' + esc(typeLabel + ' · ' +
-            (channel.enabled ? t('notify.badgeRunning') : t('notify.badgeDisabled'))) + '</div>' +
-          '<div class="chsum">' + esc(channelSummary(channel)) + '</div>' +
+            (channel.enabled ? t('notify.stateOn') : t('notify.stateOff'))) + '</div>' +
           '</div>' +
           '<div class="spacer"></div>' +
-          '<button class="btn sm" data-act="channel-test" data-id="' + esc(channel.id) + '">' +
-          t('common.test') + '</button>' +
+          '<button class="btn sm" data-act="channel-test" data-id="' + esc(channel.id) + '"' +
+          (testing ? ' disabled' : '') + '>' +
+          (testing ? t('notify.testing') : t('common.test')) + '</button>' +
           '<button class="btn sm" data-act="channel-edit" data-id="' + esc(channel.id) + '">' +
           t('common.edit') + '</button>' +
           '<button class="btn sm danger" data-act="channel-delete" data-id="' +
@@ -2946,11 +2993,7 @@
       });
       html += '</div>';
     }
-    // 支持列表这句是空态下半部分，居中与上面的「还没有配置通知渠道。」对齐；
-    // 有渠道时它就是普通的卡片脚注，也跟着居中，不影响读数。
-    html += '<div class="card-note card-note-center">' +
-      esc(t('notify.channelsSupported')) + '</div>' +
-      '</div>';
+    html += '<div class="hint">' + esc(t('notify.channelsSupported')) + '</div></div>';
 
     // 投递记录
     html += deliveryCardHtml();
@@ -5096,7 +5139,10 @@
       var nextStatus = trigger.dataset.status || 'all';
       if (state.deliv.status === nextStatus) return;
       state.deliv.status = nextStatus;
+      // 筛选与「已读快照」无关：换筛选要重新取一份，不能让旧结果继续顶着；
+      // 列表内容整批换掉，滚动位置也回到顶端
       state.deliv.data = null;
+      state.deliv.resetScroll = true;
       loadDeliveries().then(function () { if (inSettingsTab('notify')) renderSettings(); });
       return;
     }
@@ -5110,17 +5156,22 @@
     }
 
     if (act === 'deliv-clear') {
-      if (!confirmDanger(t('notify.delivClearConfirm'))) return;
-      busy(trigger, true);
-      api('notifications/deliveries/clear', { method: 'POST', body: {} })
-        .then(function () {
-          toast(t('notify.delivCleared'), 'ok');
-          state.deliv.data = null;
-          return loadDeliveries();
-        })
-        .then(function () { if (inSettingsTab('notify')) renderSettings(); })
-        .catch(function (err) { toast(localizeErr(err), 'err'); })
-        .finally(function () { busy(trigger, false); });
+      askConfirm(t('notify.delivClearConfirm'), {
+        title: t('notify.delivClear'),
+        ok: t('notify.delivClear')
+      }).then(function (yes) {
+        if (!yes) return;
+        busy(trigger, true);
+        return api('notifications/deliveries/clear', { method: 'POST', body: {} })
+          .then(function () {
+            toast(t('notify.delivCleared'), 'ok');
+            state.deliv.data = null;
+            return loadDeliveries();
+          })
+          .then(function () { if (inSettingsTab('notify')) renderSettings(); })
+          .catch(function (err) { toast(localizeErr(err), 'err'); })
+          .finally(function () { busy(trigger, false); });
+      });
       return;
     }
 
@@ -5176,18 +5227,36 @@
     }
 
     if (act === 'channel-test' || act === 'channel-test-draft') {
-      var payload = act === 'channel-test-draft'
+      var isDraft = act === 'channel-test-draft';
+      var payload = isDraft
         ? { channel: draftChannel() }
         : { channelId: trigger.dataset.id };
       if (payload.channel) {
         var problem = validateChannel(payload.channel);
         if (problem) { toast(problem, 'warn'); return; }
       }
+      var testId = isDraft ? '' : (trigger.dataset.id || '');
+      // 发送期间按钮显示「发送中…」：一次失败的测试要等上游超时（最长 10 秒），
+      // 期间按钮没有任何变化的话，用户会以为点了没反应、连着点好几次。
+      state.notifications.testing = testId;
+      if (!isDraft && inSettingsTab('notify')) renderSettings();
       busy(trigger, true);
       api('notifications/test', { method: 'POST', body: payload })
-        .then(function (data) { toast(t('notify.testSent', { detail: (data.detail || t('common.success')) }), 'ok'); })
+        .then(function (data) {
+          var name = t('common.success');
+          (state.notifications.settings.channels || []).forEach(function (item) {
+            if (item.id === testId) name = item.name || item.type || name;
+          });
+          toast(t('notify.testOk', { name: name }), 'ok');
+        })
         .catch(function (err) { toast(localizeErr(err), 'err', 7000); })
-        .finally(function () { busy(trigger, false); });
+        .finally(function () {
+          state.notifications.testing = '';
+          busy(trigger, false);
+          // 测试一定会写一条投递记录，但列表是上一次进页面时的快照 ——
+          // 不重新取一遍，用户点完测试看到的还是「还没有投递记录」。
+          refreshDeliveries();
+        });
       return;
     }
 
