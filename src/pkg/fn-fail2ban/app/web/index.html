@@ -129,6 +129,21 @@
   </div>
 </div>
 
+<!-- 确认框：不用 window.confirm。
+     原生 confirm 是浏览器面板，与这套界面两套视觉；而且它是同步阻塞的，
+     升级遮罩期间连轮询都会一起卡住。这里用站内模态代替。 -->
+<div class="modal-wrap" id="confirmMask" hidden>
+  <div class="modal is-confirm" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="modal-head" id="confirmTitle"></div>
+    <div class="modal-body" id="confirmBody"></div>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn" type="button" id="confirmCancel">取消</button>
+      <button class="btn danger" type="button" id="confirmOk">确定</button>
+    </div>
+  </div>
+</div>
+
 <!-- 编辑抽屉 -->
 <div class="drawer-mask" id="drawerMask"></div>
 <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">

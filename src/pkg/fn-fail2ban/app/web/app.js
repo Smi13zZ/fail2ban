@@ -3893,7 +3893,17 @@
   function startUpgrade(button) {
     var info = updateInfo() || {};
     var target = info.latest || "";
-    if (!confirmDanger(t("update.installConfirm", { version: target || "—" }))) return;
+    // 升级用站内模态确认：window.confirm 是同步阻塞的，
+    // 遮罩起来以后它会把轮询一起卡住，看起来像升级卡死。
+    askConfirm(t("update.installConfirm", { version: target || "—" }), {
+      title: t("update.install"),
+      ok: t("update.install")
+    }).then(function (ok) {
+      if (ok) runUpgrade(target, button);
+    });
+  }
+
+  function runUpgrade(target, button) {
     state.update.before = (state.meta && state.meta.app && state.meta.app.version) || "";
     state.update.error = "";
     // 升级期间页面可能被用户手动刷新（或者浏览器崩溃后恢复）。
@@ -4700,6 +4710,43 @@
     }).finally(function () { busy(button, false); });
   }
 
+  // 站内确认框，返回 Promise<boolean>。
+  // 不用 window.confirm：它是浏览器面板、与这套界面两套视觉，而且同步阻塞 ——
+  // 升级遮罩起来以后连轮询都会一起卡住，看起来就像升级卡死。
+  var confirmResolve = null;
+
+  function closeConfirm(result) {
+    var mask = $('#confirmMask');
+    if (mask) mask.hidden = true;
+    if (confirmResolve) {
+      var fn = confirmResolve;
+      confirmResolve = null;
+      fn(!!result);
+    }
+  }
+
+  function askConfirm(message, opts) {
+    var options = opts || {};
+    var mask = $('#confirmMask');
+    // 没有模态（不该发生）就退化成「直接执行」，不要让一次点击静默失效
+    if (!mask) return Promise.resolve(true);
+    $('#confirmTitle').textContent = options.title || t('common.confirmTitle');
+    $('#confirmBody').textContent = message;
+    var okBtn = $('#confirmOk');
+    okBtn.textContent = options.ok || t('common.confirmOk');
+    $('#confirmCancel').textContent = t('common.cancel');
+    mask.hidden = false;
+    return new Promise(function (resolve) {
+      confirmResolve = resolve;
+      // 焦点给主按钮：回车即确认，与原生弹窗的习惯一致
+      okBtn.focus();
+    });
+  }
+
+  // 其余 13 处危险操作的确认仍走同步 confirm：它们的调用点是
+  // 「if (!confirmDanger(…)) return;」这种守卫写法，改成异步要把 14 个函数体
+  // 全部包一层回调，改动面大、容易漏。只有一键升级必须用站内模态 ——
+  // 它是唯一会在遮罩/轮询期间弹出来的确认，同步阻塞会把轮询一起卡住。
   function confirmDanger(message) {
     if (state.prefs && state.prefs.confirmDanger === false) return true;
     return window.confirm(message);
@@ -5795,6 +5842,17 @@
     });
     var bannerClose = $('#upBannerClose');
     if (bannerClose) bannerClose.addEventListener('click', dismissUpdateBanner);
+
+    // 站内确认框
+    var confirmOk = $('#confirmOk');
+    if (confirmOk) confirmOk.addEventListener('click', function () { closeConfirm(true); });
+    var confirmCancel = $('#confirmCancel');
+    if (confirmCancel) confirmCancel.addEventListener('click', function () { closeConfirm(false); });
+    var confirmMask = $('#confirmMask');
+    if (confirmMask) confirmMask.addEventListener('click', function (event) {
+      // 点遮罩本身 = 取消（点在框内不关）
+      if (event.target === confirmMask) closeConfirm(false);
+    });
     // 页面开着时每 30 分钟查一次新版本；visibilitychange 变可见且已过期时补查
     updateTimer = setInterval(onUpdateTick, 60000);
 

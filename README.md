@@ -130,7 +130,7 @@ Bark（iOS） · Slack · Server 酱 · PushPlus · WxPusher · Telegram · 自�
 ### 方式二：命令行安装
 
 ```bash
-appcenter-cli install-fpk /path/to/fn-fail2ban-26.11.52-all.fpk
+appcenter-cli install-fpk /path/to/fn-fail2ban-26.11.53-all.fpk
 ```
 
 > `appcenter-cli` **不会覆盖已安装的同名应用**（只回一句 `is installed`），

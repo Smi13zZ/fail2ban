@@ -2061,6 +2061,45 @@ details.raw pre {
 .chip.err { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
 .chip.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
 
+/* --------------------------------------------------------- 模态确认框 --- */
+
+/* 站内确认框，替代 window.confirm：原生弹窗是浏览器面板、与这套界面两套视觉，
+   而且同步阻塞 —— 升级遮罩期间会把轮询一起卡住。 */
+.modal-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  padding: 20px;
+  background: rgba(0, 0, 0, .45);
+  display: grid;
+  place-items: center;
+}
+.modal-wrap[hidden] { display: none; }
+.modal {
+  width: min(420px, 100%);
+  max-height: 88vh;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+}
+.modal-head {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+  font-weight: 600;
+}
+.modal-body { padding: 16px 18px; font-size: 13.5px; line-height: 1.6; }
+.modal-foot {
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.modal-foot .spacer { flex: 1; }
+
 /* --------------------------------------------- 新版本提示条（每个页面） --- */
 
 /* 一条横贯内容区的提示，出现在所有页面顶部：图标 + 标题/副标题 + 右侧动作。
