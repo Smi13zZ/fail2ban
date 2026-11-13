@@ -3244,6 +3244,8 @@
       return (Number(b.t) || 0) - (Number(a.t) || 0);
     });
     var updateKeepN = Number(data.updates_keep) || 0;
+    // 安装包真正落盘的目录（后端给的是 @apphome 下的工作区，不是 @appdata/update）
+    var pkgDir = String(data.packages_dir || '');
     var logEst = storageEstimateText('logs');
     var backupEst = storageEstimateText('backups');
     var allEst = storageEstimateText('all');
@@ -3305,10 +3307,13 @@
     // 安装包缓存
     html += '<h4 class="storage-h4">' + t('stor.packagesTitle') + '</h4>';
     if (!packages.length) {
-      html += '<div class="faint">' + t('stor.packagesEmpty') + '</div>';
+      // 空态说清「什么时候会有包」：一键升级下载的包留在这里，
+      // 从没升级过自然一个也没有 —— 不说的话看起来像功能坏了。
+      html += '<div class="faint">' + esc(t('stor.packagesEmpty')) + '</div>' +
+        (pkgDir ? '<div class="card-note">' + esc(t('stor.packagesDir', { path: pkgDir })) + '</div>' : '');
     } else {
       html += '<div class="bscroll storage-scroll"><div class="table-wrap">' +
-        '<table class="ttable tstorage"><thead><tr>' +
+        '<table class="ttable tstorage tpkg"><thead><tr>' +
         '<th>' + t('common.name') + '</th>' +
         '<th class="num" style="width:96px">' + t('common.size') + '</th>' +
         '</tr></thead><tbody>';

@@ -180,12 +180,22 @@ def _work_dir(var_dir=None):
     base = os.environ.get("TRIM_PKGHOME") or ""
     if not base:
         raw = var_dir or _CTX.get("var_dir") or os.environ.get("TRIM_PKGVAR") or ""
-        # /vol1/@appdata/<app> → /vol1/@apphome/<app>：同级目录，卸载时保留。
-        # 这里按字面量替换而不是 os.sep 拼接：这段代码可能在 Windows 上跑单测，
-        # os.sep 会是反斜杠，替换就永远匹配不上。
-        base = raw.replace("/@appdata/", "/@apphome/")
-        if base == raw and "@appdata" in raw:
-            base = raw.replace("@appdata", "@apphome")
+        # 先把路径解析成真实路径再替换。var_dir 在设备上通常是
+        # /var/apps/<app>/var —— 那是指向 /vol1/@appdata/<app> 的软链接，
+        # 字面量里根本没有 "@appdata"，直接替换会原样返回、把工作区仍算在
+        # @appdata 里（等于没起作用，卸载时照样被清空）。
+        # 解析之后再替换，两种写法都能落到 @apphome。
+        try:
+            real = os.path.realpath(raw) if raw else ""
+        except OSError:
+            real = raw
+        base = real.replace("/@appdata/", "/@apphome/")
+        if base == real and "@appdata" in real:
+            base = real.replace("@appdata", "@apphome")
+        if base == real and not base.startswith("/@apphome"):
+            # 认不出 @appdata 结构（非常规部署、或本地单测传了个临时目录）：
+            # 退回 <var>/update，宁可与日志同目录，也不要算出个不存在的路径。
+            base = raw
     if not base:
         return ""
     return base.rstrip("/") + "/update"
@@ -197,6 +207,16 @@ def _update_dir(var_dir=None):
     if not base:
         return ""
     return os.path.join(base, "update")
+
+
+def package_dir(var_dir=None):
+    """安装包实际落盘的目录（@apphome 下的工作区）。
+
+    存储页要列「安装包缓存」，就得按这个真实位置去找 —— 只看 @appdata/update
+    永远看不到任何包，因为下载自始至终没有写到那里（见 _work_dir 的说明：
+    卸载会清空 @appdata，包放那里会被卸掉一半）。
+    """
+    return _work_dir(var_dir)
 
 
 def _install_log_path(var_dir=None):
