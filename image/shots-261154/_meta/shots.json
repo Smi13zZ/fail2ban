@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-13 13:33:50",
-  "version": "26.11.53",
+  "generatedAt": "2026-11-13 14:04:32",
+  "version": "26.11.54",
   "chromium": "Chrome/156.0.8078.79",
   "url": "http://127.0.0.1:18752/",
   "theme": null,
@@ -52,7 +52,7 @@
       "page": "概览",
       "problems": [],
       "stats": {
-        "bytes": 84303,
+        "bytes": 84219,
         "width": 1440,
         "height": 900,
         "sampled": 54000,
@@ -66,7 +66,7 @@
         "meanLuma": 250.9
       },
       "pngH": 900,
-      "waitedMs": 823,
+      "waitedMs": 675,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -77,7 +77,7 @@
       "page": "Jail 管理",
       "problems": [],
       "stats": {
-        "bytes": 45543,
+        "bytes": 45492,
         "width": 1440,
         "height": 900,
         "sampled": 54000,
@@ -91,7 +91,7 @@
         "meanLuma": 251.6
       },
       "pngH": 900,
-      "waitedMs": 676,
+      "waitedMs": 671,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -102,7 +102,7 @@
       "page": "封禁管理",
       "problems": [],
       "stats": {
-        "bytes": 49868,
+        "bytes": 49816,
         "width": 1440,
         "height": 900,
         "sampled": 54000,
@@ -116,7 +116,7 @@
         "meanLuma": 251.5
       },
       "pngH": 900,
-      "waitedMs": 827,
+      "waitedMs": 825,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -127,7 +127,7 @@
       "page": "过滤器",
       "problems": [],
       "stats": {
-        "bytes": 46159,
+        "bytes": 46108,
         "width": 1440,
         "height": 900,
         "sampled": 54000,
@@ -141,7 +141,7 @@
         "meanLuma": 251.4
       },
       "pngH": 900,
-      "waitedMs": 673,
+      "waitedMs": 670,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -152,7 +152,7 @@
       "page": "fn-knock 联动",
       "problems": [],
       "stats": {
-        "bytes": 102880,
+        "bytes": 102829,
         "width": 1440,
         "height": 900,
         "sampled": 54000,
@@ -177,7 +177,7 @@
       "page": "fnknock · mode",
       "problems": [],
       "stats": {
-        "bytes": 102880,
+        "bytes": 102829,
         "width": 1440,
         "height": 900,
         "sampled": 54000,
@@ -191,7 +191,7 @@
         "meanLuma": 248.7
       },
       "pngH": 900,
-      "waitedMs": 675,
+      "waitedMs": 677,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -202,7 +202,7 @@
       "page": "fnknock · sync",
       "problems": [],
       "stats": {
-        "bytes": 101074,
+        "bytes": 101030,
         "width": 1440,
         "height": 900,
         "sampled": 54000,
@@ -216,7 +216,7 @@
         "meanLuma": 248.5
       },
       "pngH": 900,
-      "waitedMs": 674,
+      "waitedMs": 676,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -227,7 +227,7 @@
       "page": "fnknock · conn",
       "problems": [],
       "stats": {
-        "bytes": 84629,
+        "bytes": 84585,
         "width": 1440,
         "height": 900,
         "sampled": 54000,
@@ -241,7 +241,7 @@
         "meanLuma": 249.1
       },
       "pngH": 900,
-      "waitedMs": 672,
+      "waitedMs": 675,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -252,7 +252,7 @@
       "page": "fnknock · status",
       "problems": [],
       "stats": {
-        "bytes": 64136,
+        "bytes": 64087,
         "width": 1440,
         "height": 900,
         "sampled": 54000,
@@ -266,7 +266,7 @@
         "meanLuma": 249.7
       },
       "pngH": 900,
-      "waitedMs": 673,
+      "waitedMs": 674,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -277,7 +277,7 @@
       "page": "fnknock · list",
       "problems": [],
       "stats": {
-        "bytes": 59823,
+        "bytes": 59771,
         "width": 1440,
         "height": 900,
         "sampled": 54000,
@@ -291,7 +291,7 @@
         "meanLuma": 249.8
       },
       "pngH": 900,
-      "waitedMs": 673,
+      "waitedMs": 674,
       "console": [
         "error: Failed to load resource: the server responded with a status of 502 (Bad Gateway)"
       ],
@@ -304,7 +304,7 @@
       "page": "fnknock · log",
       "problems": [],
       "stats": {
-        "bytes": 51018,
+        "bytes": 50967,
         "width": 1440,
         "height": 900,
         "sampled": 54000,
@@ -318,7 +318,7 @@
         "meanLuma": 250.1
       },
       "pngH": 900,
-      "waitedMs": 673,
+      "waitedMs": 672,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -329,7 +329,7 @@
       "page": "设置 · panel",
       "problems": [],
       "stats": {
-        "bytes": 50606,
+        "bytes": 50559,
         "width": 1440,
         "height": 900,
         "sampled": 54000,
@@ -343,7 +343,7 @@
         "meanLuma": 251.1
       },
       "pngH": 900,
-      "waitedMs": 673,
+      "waitedMs": 672,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -354,7 +354,7 @@
       "page": "设置 · appearance",
       "problems": [],
       "stats": {
-        "bytes": 53554,
+        "bytes": 53508,
         "width": 1440,
         "height": 900,
         "sampled": 54000,
@@ -368,7 +368,7 @@
         "meanLuma": 251.0
       },
       "pngH": 900,
-      "waitedMs": 671,
+      "waitedMs": 673,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -379,7 +379,7 @@
       "page": "设置 · policy",
       "problems": [],
       "stats": {
-        "bytes": 126345,
+        "bytes": 126297,
         "width": 1440,
         "height": 1535,
         "sampled": 61440,
@@ -393,7 +393,7 @@
         "meanLuma": 251.6
       },
       "pngH": 1535,
-      "waitedMs": 672,
+      "waitedMs": 673,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -404,7 +404,7 @@
       "page": "设置 · notify",
       "problems": [],
       "stats": {
-        "bytes": 113383,
+        "bytes": 113350,
         "width": 1440,
         "height": 1341,
         "sampled": 53760,
@@ -429,7 +429,7 @@
       "page": "设置 · maint",
       "problems": [],
       "stats": {
-        "bytes": 116364,
+        "bytes": 116327,
         "width": 1440,
         "height": 1187,
         "sampled": 57120,
@@ -443,7 +443,7 @@
         "meanLuma": 250.3
       },
       "pngH": 1187,
-      "waitedMs": 673,
+      "waitedMs": 672,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -454,7 +454,7 @@
       "page": "设置 · storage",
       "problems": [],
       "stats": {
-        "bytes": 86409,
+        "bytes": 86680,
         "width": 1440,
         "height": 900,
         "sampled": 54000,
@@ -479,7 +479,7 @@
       "page": "设置 · update",
       "problems": [],
       "stats": {
-        "bytes": 97457,
+        "bytes": 100835,
         "width": 1440,
         "height": 1010,
         "sampled": 60720,
@@ -490,10 +490,10 @@
           252,
           252
         ],
-        "meanLuma": 248.4
+        "meanLuma": 248.3
       },
       "pngH": 1010,
-      "waitedMs": 674,
+      "waitedMs": 675,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -504,7 +504,7 @@
       "page": "设置 · guide",
       "problems": [],
       "stats": {
-        "bytes": 114587,
+        "bytes": 114564,
         "width": 1440,
         "height": 1527,
         "sampled": 61200,
@@ -518,7 +518,7 @@
         "meanLuma": 251.7
       },
       "pngH": 1527,
-      "waitedMs": 673,
+      "waitedMs": 825,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -529,7 +529,7 @@
       "page": "设置 · about",
       "problems": [],
       "stats": {
-        "bytes": 55897,
+        "bytes": 55793,
         "width": 1440,
         "height": 900,
         "sampled": 54000,
@@ -554,7 +554,7 @@
       "page": "日志",
       "problems": [],
       "stats": {
-        "bytes": 107990,
+        "bytes": 107942,
         "width": 1440,
         "height": 900,
         "sampled": 54000,
@@ -568,7 +568,7 @@
         "meanLuma": 249.6
       },
       "pngH": 900,
-      "waitedMs": 681,
+      "waitedMs": 685,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -579,21 +579,21 @@
       "page": "概览",
       "problems": [],
       "stats": {
-        "bytes": 149789,
+        "bytes": 149581,
         "width": 780,
         "height": 3276,
         "sampled": 60840,
         "uniqueColors": 99,
-        "dominantFrac": 0.9496,
+        "dominantFrac": 0.9497,
         "dominantRGB": [
           252,
           252,
           252
         ],
-        "meanLuma": 251.4
+        "meanLuma": 251.5
       },
       "pngH": 3276,
-      "waitedMs": 832,
+      "waitedMs": 828,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -618,7 +618,7 @@
         "meanLuma": 243.8
       },
       "pngH": 1688,
-      "waitedMs": 674,
+      "waitedMs": 673,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -643,7 +643,7 @@
         "meanLuma": 250.3
       },
       "pngH": 1688,
-      "waitedMs": 974,
+      "waitedMs": 824,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -668,7 +668,7 @@
         "meanLuma": 248.9
       },
       "pngH": 1688,
-      "waitedMs": 674,
+      "waitedMs": 672,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -718,7 +718,7 @@
         "meanLuma": 243.3
       },
       "pngH": 2168,
-      "waitedMs": 677,
+      "waitedMs": 676,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -768,7 +768,7 @@
         "meanLuma": 243.4
       },
       "pngH": 1912,
-      "waitedMs": 675,
+      "waitedMs": 673,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -793,7 +793,7 @@
         "meanLuma": 243.2
       },
       "pngH": 1688,
-      "waitedMs": 676,
+      "waitedMs": 674,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -845,7 +845,7 @@
         "meanLuma": 244.3
       },
       "pngH": 1688,
-      "waitedMs": 678,
+      "waitedMs": 677,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -870,7 +870,7 @@
         "meanLuma": 241.7
       },
       "pngH": 1688,
-      "waitedMs": 672,
+      "waitedMs": 673,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -895,7 +895,7 @@
         "meanLuma": 242.3
       },
       "pngH": 1688,
-      "waitedMs": 673,
+      "waitedMs": 671,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -920,7 +920,7 @@
         "meanLuma": 247.8
       },
       "pngH": 3172,
-      "waitedMs": 676,
+      "waitedMs": 672,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -945,7 +945,7 @@
         "meanLuma": 246.6
       },
       "pngH": 2924,
-      "waitedMs": 675,
+      "waitedMs": 676,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -970,7 +970,7 @@
         "meanLuma": 247.3
       },
       "pngH": 2948,
-      "waitedMs": 674,
+      "waitedMs": 673,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -981,7 +981,7 @@
       "page": "设置 · storage",
       "problems": [],
       "stats": {
-        "bytes": 143152,
+        "bytes": 143329,
         "width": 780,
         "height": 1934,
         "sampled": 62920,
@@ -1006,12 +1006,12 @@
       "page": "设置 · update",
       "problems": [],
       "stats": {
-        "bytes": 157238,
+        "bytes": 162301,
         "width": 780,
         "height": 2260,
         "sampled": 58760,
         "uniqueColors": 63,
-        "dominantFrac": 0.6989,
+        "dominantFrac": 0.6991,
         "dominantRGB": [
           252,
           252,
@@ -1020,7 +1020,7 @@
         "meanLuma": 246.6
       },
       "pngH": 2260,
-      "waitedMs": 672,
+      "waitedMs": 673,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -1045,7 +1045,7 @@
         "meanLuma": 248.3
       },
       "pngH": 3156,
-      "waitedMs": 829,
+      "waitedMs": 827,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -1056,12 +1056,12 @@
       "page": "设置 · about",
       "problems": [],
       "stats": {
-        "bytes": 84246,
+        "bytes": 84067,
         "width": 780,
         "height": 1688,
         "sampled": 62920,
         "uniqueColors": 63,
-        "dominantFrac": 0.9016,
+        "dominantFrac": 0.9017,
         "dominantRGB": [
           252,
           252,
@@ -1070,7 +1070,7 @@
         "meanLuma": 250.5
       },
       "pngH": 1688,
-      "waitedMs": 674,
+      "waitedMs": 672,
       "console": [],
       "overflowX": false,
       "truncated": false
@@ -1095,7 +1095,7 @@
         "meanLuma": 248.7
       },
       "pngH": 1688,
-      "waitedMs": 829,
+      "waitedMs": 828,
       "console": [],
       "overflowX": false,
       "truncated": false
