@@ -123,6 +123,9 @@
       before: '',
       phase: '',
       done: false,
+      // 上一次一键升级的失败原因。遮罩一关就只剩 toast，用户回头想看
+      // 「刚才到底为什么失败」就没处看了；留在设置页顶部更经得起回看。
+      error: '',
       lastCheckAt: 0,
       lastFailAt: 0
     },
@@ -2362,9 +2365,11 @@
     var body = '<div class="card">' + cardHead(t('set.policyTitle')) +
       '<form id="settingsForm">' + globalFields + '</form>' +
       '<div class="help">' + t('set.defaultsHint') + '</div>' +
+      // foot-2：手机端这两颗按钮排成一行均分。默认的折行规则会把主要按钮
+      // 独占一整行、把「放弃修改」挤到上面靠右，两个动作用两行高度。
       cardFoot('<button class="btn" data-act="refresh">' + t('set.discard') + '</button>' +
         '<button class="btn primary" data-act="settings-save">' +
-        t('common.saveReload') + '</button>') +
+        t('common.saveReload') + '</button>', 'foot-2') +
       '</div>';
     return setSection(t('set.policyHint'), body);
   }
@@ -3479,6 +3484,12 @@
         : '') +
       '</div></div>';
 
+    // 上次升级失败的原因：遮罩关掉之后 toast 也就没了，
+    // 这一行留在页面上，用户回头能看清是下载失败、校验失败还是安装脚本没起来。
+    if (state.update.error) {
+      html += '<div class="update-error">' + esc(state.update.error) + '</div>';
+    }
+
     // 版本更新说明：可滚动、限高，长 changelog 不会把卡片撑成一屏多
     html += '<div class="sep"></div><div class="section-title">' + t('update.notes') + '</div>';
     if (info && info.notes) {
@@ -3570,8 +3581,11 @@
     verifying: 'update.phaseVerify',
     uninstall: 'update.phaseUninstall',
     uninstalling: 'update.phaseUninstall',
-    install: 'update.phaseInstall',
-    installing: 'update.phaseInstall',
+    // 后端走到 installing 时，安装包已经下完并校验过，脚本也已拉起 ——
+    // 这一步实际发生的是「面板即将被替换，服务正在重启」。
+    // 写成「正在安装新版本」会让人以为还有很长的下载/安装可看。
+    install: 'update.installingReady',
+    installing: 'update.installingReady',
     start: 'update.phaseStart',
     starting: 'update.phaseStart',
     rollback: 'update.phaseRollback',
@@ -3752,7 +3766,9 @@
         stopUpdatePoll();
         finishUpgrade(false, null, 'timeout');
       }
-    }, 1000);
+      // 400ms：安装包不到 1 MB，千兆内网一秒内就下完，
+      // 间隔拉长只能抓到一两个中间值，进度条看起来像「直接跳到 100%」。
+    }, 400);
   }
   // mode: "ok" 装完 / "failed" 后端明确报错 / "timeout" 我们等不到了（不代表升级失败）
   function finishUpgrade(ok, prog, mode) {
@@ -3781,13 +3797,17 @@
       toast(t("update.done"), "ok", 4000);
       setTimeout(function () { location.reload(); }, 1500);
     } else if (kind === "timeout") {
+      state.update.error = t("update.pollTimeout");
       toast(t("update.pollTimeout"), "warn", 9000);
     } else {
       var detail = (prog && (prog.detail || prog.error)) || "";
-      toast(detail
-        ? t("update.failed", { detail: localizedSource(detail, "common.unknownError") })
-        : t("update.phaseFailed"), "err", 9000);
+      state.update.error = detail
+        ? t("update.installFailDetail", { detail: localizedSource(detail, "common.unknownError") })
+        : t("update.installFailDetail", { detail: t("update.phaseFailed") });
+      toast(state.update.error, "err", 9000);
     }
+    // 失败/超时都要把这一行画到设置页上，不用等用户再点一次检查
+    if (!ok && inSettingsTab('update')) renderSettings();
   }
 
   function startUpgrade(button) {
@@ -3795,6 +3815,7 @@
     var target = info.latest || "";
     if (!confirmDanger(t("update.installConfirm", { version: target || "—" }))) return;
     state.update.before = (state.meta && state.meta.app && state.meta.app.version) || "";
+    state.update.error = "";
     openUpOverlay(target ? t("update.installingTitle", { v: target }) : t("update.upgrading"));
     paintUpStage(t("update.installingDownload"));
     if (button) busy(button, true);
@@ -3812,7 +3833,11 @@
             toast(t("update.installBlocked"), "warn", 5000);
             return;
           }
-          toast(localizedSource(data.detail || data.error, "update.phaseFailed"), "err", 9000);
+          state.update.error = t("update.installFailDetail", {
+            detail: localizedSource(data.detail || data.error, "update.phaseFailed")
+          });
+          toast(state.update.error, "err", 9000);
+          if (inSettingsTab('update')) renderSettings();
           return;
         }
         if (data && data.phase) paintUpProgress(data);
@@ -3824,7 +3849,8 @@
           closeUpOverlay();
           toast(t("update.installBlocked"), "warn");
         } else {
-          // 升级期间服务会重启，首个请求失败是常态，留着轮询等它回来
+          // 升级期间服务会重启，首个请求失败是常态，留着轮询等它回来。
+          // 这一条不进 state.update.error —— 它不是「升级失败」，只是请求没发出去。
           toast(localizeErr(err, "update.openFailed"), "warn", 6000);
         }
       })
