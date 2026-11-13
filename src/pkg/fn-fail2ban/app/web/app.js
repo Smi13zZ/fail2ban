@@ -3366,35 +3366,41 @@
         size: fmtSize(est.bytes)
       });
     }
-    if (!confirmDanger(message)) return;
-    busy(button, true);
-    api('storage/cleanup', { method: 'POST', body: { target: target, keep: keep } })
-      .then(function (result) {
-        // 「升级下载/安装进行中」后端可能回 200 + {ok:false, busy:true}，
-        // 也可能被路由映射成 409，两种都要认。
-        if (result && (result.busy === true || result.ok === false)) {
-          if (result.busy === true || result.error === 'busy') {
-            toast(t('stor.busy'), 'warn');
-            return null;
+    // 标题跟着动作走：「清理日志 / 清理旧备份 / 全部清理」三种，按钮文案一致。
+    // 这句话里逐行列出了「保留几个」，用站内模态才能把换行与数字排整齐。
+    var titleKey = target === 'logs' ? 'stor.cleanLogs'
+      : (target === 'backups' ? 'stor.cleanBackups' : 'stor.cleanAll');
+    confirmDanger(message, { title: t(titleKey), ok: t(titleKey) }).then(function (yes) {
+      if (!yes) return;
+      busy(button, true);
+      return api('storage/cleanup', { method: 'POST', body: { target: target, keep: keep } })
+        .then(function (result) {
+          // 「升级下载/安装进行中」后端可能回 200 + {ok:false, busy:true}，
+          // 也可能被路由映射成 409，两种都要认。
+          if (result && (result.busy === true || result.ok === false)) {
+            if (result.busy === true || result.error === 'busy') {
+              toast(t('stor.busy'), 'warn');
+              return null;
+            }
+            toast(localizeErr({ message: result.detail }), 'err');
+            return refresh();
           }
-          toast(localizeErr({ message: result.detail }), 'err');
+          // 后端顺手带回了清理后的最新报告，省一次往返
+          if (result && result.storage) state.storage = result.storage;
+          var freed = Number(result && result.freed) || 0;
+          var removed = Number(result && result.removed) || 0;
+          if (!freed && !removed) toast(t('stor.cleanedNothing'), 'ok');
+          else toast(t('stor.cleaned', { size: fmtSize(freed), removed: removed }), 'ok', 5000);
+          // detail 只放失败的路径，不当文案用
+          if (result && result.detail) toast(t('stor.cleanFailed', { detail: result.detail }), 'warn', 8000);
           return refresh();
-        }
-        // 后端顺手带回了清理后的最新报告，省一次往返
-        if (result && result.storage) state.storage = result.storage;
-        var freed = Number(result && result.freed) || 0;
-        var removed = Number(result && result.removed) || 0;
-        if (!freed && !removed) toast(t('stor.cleanedNothing'), 'ok');
-        else toast(t('stor.cleaned', { size: fmtSize(freed), removed: removed }), 'ok', 5000);
-        // detail 只放失败的路径，不当文案用
-        if (result && result.detail) toast(t('stor.cleanFailed', { detail: result.detail }), 'warn', 8000);
-        return refresh();
-      })
-      .catch(function (err) {
-        if (err && err.status === 409) { toast(t('stor.busy'), 'warn'); return; }
-        toast(localizeErr(err), 'err');
-      })
-      .finally(function () { busy(button, false); });
+        })
+        .catch(function (err) {
+          if (err && err.status === 409) { toast(t('stor.busy'), 'warn'); return; }
+          toast(localizeErr(err), 'err');
+        })
+        .finally(function () { busy(button, false); });
+    });
   }
 
   /* ------------------------------------------------------------- 更新 */
@@ -4787,9 +4793,16 @@
     // 没有模态（不该发生）就退化成「直接执行」，不要让一次点击静默失效
     if (!mask) return Promise.resolve(true);
     $('#confirmTitle').textContent = options.title || t('common.confirmTitle');
-    $('#confirmBody').textContent = message;
+    // 正文可能带换行（存储清理那句话会把「保留几个」逐行列出来），
+    // textContent 不会把 \n 渲染成换行，所以显式给一个能保留换行的类。
+    var body = $('#confirmBody');
+    body.textContent = message;
+    body.classList.toggle('multiline', String(message).indexOf('\n') >= 0);
     var okBtn = $('#confirmOk');
     okBtn.textContent = options.ok || t('common.confirmOk');
+    // 危险操作的主按钮用红色：和列表里的「删除」同一个视觉语义，
+    // 用户不用读文案就知道这一下是破坏性的。
+    okBtn.className = 'btn ' + (options.danger === false ? 'primary' : 'danger');
     $('#confirmCancel').textContent = t('common.cancel');
     mask.hidden = false;
     return new Promise(function (resolve) {
@@ -4799,13 +4812,25 @@
     });
   }
 
-  // 其余 13 处危险操作的确认仍走同步 confirm：它们的调用点是
-  // 「if (!confirmDanger(…)) return;」这种守卫写法，改成异步要把 14 个函数体
-  // 全部包一层回调，改动面大、容易漏。只有一键升级必须用站内模态 ——
-  // 它是唯一会在遮罩/轮询期间弹出来的确认，同步阻塞会把轮询一起卡住。
-  function confirmDanger(message) {
-    if (state.prefs && state.prefs.confirmDanger === false) return true;
-    return window.confirm(message);
+  // 危险操作的确认统一走站内模态，返回 Promise<boolean>。
+  //
+  // 这里曾经用过 window.confirm：它是浏览器原生弹窗，与这套界面两套视觉 ——
+  // 手机上尤其明显，弹出来是一个灰底系统对话框，按钮是系统的「取消 / 确定」，
+  // 与面板里的按钮完全不是一个东西。而且它是**同步阻塞**的：弹窗期间渲染进程
+  // 停住，升级遮罩里的进度轮询也跟着停，看起来像升级卡死。
+  // 早期只把「一键升级」换成了站内模态，其余 13 处按「守卫写法改造成本高」留了
+  // 下来，结果是同一次会话里两种弹窗交替出现。现在全部统一。
+  //
+  // opts.title / opts.ok 可以覆盖标题与主按钮文案（删除类用「删除」，
+  // 解封类用「解封」），默认「请确认 / 确定执行」。
+  function confirmDanger(message, opts) {
+    var options = opts || {};
+    if (state.prefs && state.prefs.confirmDanger === false) return Promise.resolve(true);
+    return askConfirm(message, {
+      title: options.title || t('common.confirmTitle'),
+      ok: options.ok || t('common.confirmDangerOk'),
+      danger: options.danger !== false
+    });
   }
 
   function onClick(event) {
@@ -4879,13 +4904,16 @@
     }
 
     if (act === 'install') {
-      if (!confirmDanger(t('dash.installConfirm'))) return;
-      busy(trigger, true);
-      api('install', { method: 'POST', body: {} }).then(function (data) {
-        toast(localizeMsg(data.message, 'dash.installDone'), 'ok');
-        return refresh();
-      }).catch(function (err) { toast(localizeErr(err), 'err', 9000); })
-        .finally(function () { busy(trigger, false); });
+      confirmDanger(t('dash.installConfirm'),
+        { title: t('dash.installNow'), ok: t('dash.installNow') }).then(function (yes) {
+        if (!yes) return;
+        busy(trigger, true);
+        return api('install', { method: 'POST', body: {} }).then(function (data) {
+          toast(localizeMsg(data.message, 'dash.installDone'), 'ok');
+          return refresh();
+        }).catch(function (err) { toast(localizeErr(err), 'err', 9000); })
+          .finally(function () { busy(trigger, false); });
+      });
       return;
     }
 
@@ -4903,8 +4931,12 @@
     if (act === 'fnk-push') { manualFnknockSync('push', trigger); return; }
     if (act === 'fnk-remove') { manualFnknockSync('remove', trigger); return; }
     if (act === 'fnk-remove-one') {
-      if (!confirmDanger(t('fnk.removeConfirm', { ip: ip }))) return;
-      fnknockSync({ action: 'remove-one', ips: [ip] }, trigger);
+      confirmDanger(t('fnk.removeConfirm', { ip: ip }),
+        { title: t('common.delete'), ok: t('common.delete') })
+        .then(function (yes) {
+          if (!yes) return;
+          fnknockSync({ action: 'remove-one', ips: [ip] }, trigger);
+        });
       return;
     }
     if (act === 'fnk-log-clear') {
@@ -4962,12 +4994,15 @@
     }
 
     if (act === 'jail-reset') {
-      if (!confirmDanger(t('jail.unmanageConfirm'))) return;
-      busy(trigger, true);
-      api('jails/' + encodeURIComponent(name), { method: 'DELETE', body: { reload: reloadFlag() } })
-        .then(function () { toast(t('jail.unmanaged'), 'ok'); closeDrawer(); return refresh(); })
-        .catch(function (err) { toast(localizeErr(err), 'err'); })
-        .finally(function () { busy(trigger, false); });
+      confirmDanger(t('jail.unmanageConfirm'),
+        { title: t('jail.unmanage'), ok: t('jail.unmanage') }).then(function (yes) {
+        if (!yes) return;
+        busy(trigger, true);
+        return api('jails/' + encodeURIComponent(name), { method: 'DELETE', body: { reload: reloadFlag() } })
+          .then(function () { toast(t('jail.unmanaged'), 'ok'); closeDrawer(); return refresh(); })
+          .catch(function (err) { toast(localizeErr(err), 'err'); })
+          .finally(function () { busy(trigger, false); });
+      });
       return;
     }
 
@@ -5008,12 +5043,15 @@
     }
 
     if (act === 'unban-all') {
-      if (!confirmDanger(t('ban.confirmUnbanJail'))) return;
-      busy(trigger, true);
-      api('jails/' + encodeURIComponent(name) + '/actions', { method: 'POST', body: { action: 'unban-all' } })
-        .then(function (data) { toast(localizeMsg(data.message, 'ban.unbanAllDone'), 'ok'); return refresh(); })
-        .catch(function (err) { toast(localizeErr(err), 'err'); })
-        .finally(function () { busy(trigger, false); });
+      confirmDanger(t('ban.confirmUnbanJail'),
+        { title: t('ban.unbanAll'), ok: t('ban.unbanAll') }).then(function (yes) {
+        if (!yes) return;
+        busy(trigger, true);
+        return api('jails/' + encodeURIComponent(name) + '/actions', { method: 'POST', body: { action: 'unban-all' } })
+          .then(function (data) { toast(localizeMsg(data.message, 'ban.unbanAllDone'), 'ok'); return refresh(); })
+          .catch(function (err) { toast(localizeErr(err), 'err'); })
+          .finally(function () { busy(trigger, false); });
+      });
       return;
     }
 
@@ -5021,16 +5059,19 @@
     if (act === 'unban-multi') {
       var unbanJails = String(trigger.dataset.jails || '').split(',').filter(function (item) { return item; });
       if (!unbanJails.length) { toast(t('err.orphanRecord'), 'err'); return; }
-      if (!confirmDanger(t('ban.confirmUnbanFrom', { jails: unbanJails.join(t('common.dunhao')), ip: ip }))) return;
-      busy(trigger, true);
-      Promise.all(unbanJails.map(function (jail) {
-        return api('jails/' + encodeURIComponent(jail) + '/actions',
-          { method: 'POST', body: { action: 'unban', ip: ip } });
-      })).then(function () {
-        toast((t('ban.unbanned') + " ") + ip, 'ok');
-        return refresh();
-      }).catch(function (err) { toast(localizeErr(err), 'err'); })
-        .finally(function () { busy(trigger, false); });
+      confirmDanger(t('ban.confirmUnbanFrom', { jails: unbanJails.join(t('common.dunhao')), ip: ip }),
+        { title: t('common.unban'), ok: t('common.unban') }).then(function (yes) {
+          if (!yes) return;
+          busy(trigger, true);
+          return Promise.all(unbanJails.map(function (jail) {
+            return api('jails/' + encodeURIComponent(jail) + '/actions',
+              { method: 'POST', body: { action: 'unban', ip: ip } });
+          })).then(function () {
+            toast((t('ban.unbanned') + " ") + ip, 'ok');
+            return refresh();
+          }).catch(function (err) { toast(localizeErr(err), 'err'); })
+            .finally(function () { busy(trigger, false); });
+        });
       return;
     }
 
@@ -5045,32 +5086,35 @@
         plan[item.ip] = (item.jails || []).filter(function (j) { return j; });
       });
       if (!picks.length) { toast(t('err.selectionGone'), 'warn'); return; }
-      if (!confirmDanger(t('ban.confirmUnbanSelected', { n: picks.length }))) return;
-      busy(trigger, true);
-      var done = 0;
-      var failed = [];
-      var queue = Promise.resolve();
-      picks.forEach(function (targetIp) {
-        var jails = plan[targetIp] || [];
-        queue = queue.then(function () {
-          if (!jails.length) { failed.push(targetIp + t('err.orphanJail')); return null; }
-          return Promise.all(jails.map(function (jail) {
-            return api('jails/' + encodeURIComponent(jail) + '/actions',
-              { method: 'POST', body: { action: 'unban', ip: targetIp } });
-          })).then(function () { done++; })
-            .catch(function (err) { failed.push(targetIp + t('common.colon') + localizeErr(err)); });
+      confirmDanger(t('ban.confirmUnbanSelected', { n: picks.length }),
+        { title: t('ban.unbanSelected'), ok: t('ban.unbanSelected') }).then(function (yes) {
+        if (!yes) return;
+        busy(trigger, true);
+        var done = 0;
+        var failed = [];
+        var queue = Promise.resolve();
+        picks.forEach(function (targetIp) {
+          var jails = plan[targetIp] || [];
+          queue = queue.then(function () {
+            if (!jails.length) { failed.push(targetIp + t('err.orphanJail')); return null; }
+            return Promise.all(jails.map(function (jail) {
+              return api('jails/' + encodeURIComponent(jail) + '/actions',
+                { method: 'POST', body: { action: 'unban', ip: targetIp } });
+            })).then(function () { done++; })
+              .catch(function (err) { failed.push(targetIp + t('common.colon') + localizeErr(err)); });
+          });
         });
+        return queue.then(function () {
+          if (failed.length) {
+            toast(t('ban.unbannedPartial', { done: done, failed: failed.length }) +
+              failed.slice(0, 3).join(t('common.semi')) + (failed.length > 3 ? ' …' : ''), 'warn', 8000);
+          } else {
+            toast(t('ban.unbannedCount', { n: done }), 'ok', 4000);
+          }
+          state.bans.selected = {};
+          return refresh();
+        }).finally(function () { busy(trigger, false); });
       });
-      queue.then(function () {
-        if (failed.length) {
-          toast(t('ban.unbannedPartial', { done: done, failed: failed.length }) +
-            failed.slice(0, 3).join(t('common.semi')) + (failed.length > 3 ? ' …' : ''), 'warn', 8000);
-        } else {
-          toast(t('ban.unbannedCount', { n: done }), 'ok', 4000);
-        }
-        state.bans.selected = {};
-        return refresh();
-      }).finally(function () { busy(trigger, false); });
       return;
     }
 
@@ -5097,16 +5141,19 @@
       var allJails = (state.jails || []).filter(function (j) { return j.active; })
         .map(function (j) { return j.name; });
       if (!allJails.length) { toast(t('err.noJailRunning'), 'err'); return; }
-      if (!confirmDanger(t('ban.confirmUnbanAllJails', { n: allJails.length }))) return;
-      busy(trigger, true);
-      Promise.all(allJails.map(function (jail) {
-        return api('jails/' + encodeURIComponent(jail) + '/actions',
-          { method: 'POST', body: { action: 'unban-all' } });
-      })).then(function () {
-        toast(t('ban.unbannedAllJails', { n: allJails.length }), 'ok');
-        return refresh();
-      }).catch(function (err) { toast(localizeErr(err), 'err'); })
-        .finally(function () { busy(trigger, false); });
+      confirmDanger(t('ban.confirmUnbanAllJails', { n: allJails.length }),
+        { title: t('ban.unbanAll'), ok: t('ban.unbanAll') }).then(function (yes) {
+        if (!yes) return;
+        busy(trigger, true);
+        return Promise.all(allJails.map(function (jail) {
+          return api('jails/' + encodeURIComponent(jail) + '/actions',
+            { method: 'POST', body: { action: 'unban-all' } });
+        })).then(function () {
+          toast(t('ban.unbannedAllJails', { n: allJails.length }), 'ok');
+          return refresh();
+        }).catch(function (err) { toast(localizeErr(err), 'err'); })
+          .finally(function () { busy(trigger, false); });
+      });
       return;
     }
 
@@ -5207,12 +5254,15 @@
     if (act === 'channel-delete' || act === 'channel-remove') {
       var removeId = act === 'channel-remove' ? drawerCtx.channelId : trigger.dataset.id;
       if (!removeId) { closeDrawer(); return; }
-      if (!confirmDanger(t('notify.deleteConfirm'))) return;
-      var afterDelete = notifSettingsFromForm();
-      afterDelete.channels = afterDelete.channels.filter(function (item) {
-        return item.id !== removeId;
+      confirmDanger(t('notify.deleteConfirm'),
+        { title: t('common.delete'), ok: t('common.delete') }).then(function (yes) {
+        if (!yes) return;
+        var afterDelete = notifSettingsFromForm();
+        afterDelete.channels = afterDelete.channels.filter(function (item) {
+          return item.id !== removeId;
+        });
+        saveNotifications(afterDelete, trigger, t('notify.channelDeleted')).then(closeDrawer);
       });
-      saveNotifications(afterDelete, trigger, t('notify.channelDeleted')).then(closeDrawer);
       return;
     }
 
@@ -5325,12 +5375,16 @@
     }
 
     if (act === 'filter-delete') {
-      if (!confirmDanger(t('filter.deleteConfirmInline', { name: name }))) return;
-      busy(trigger, true);
-      api('filters/' + encodeURIComponent(name), { method: 'DELETE', body: { reload: reloadFlag() } })
-        .then(function () { toast(t('filter.deleted'), 'ok'); return openFilter(name); })
-        .catch(function (err) { toast(localizeErr(err), 'err'); })
-        .finally(function () { busy(trigger, false); });
+      confirmDanger(t('filter.deleteConfirmInline', { name: name }),
+        { title: t('common.delete'), ok: t('common.delete') })
+        .then(function (yes) {
+          if (!yes) return;
+          busy(trigger, true);
+          return api('filters/' + encodeURIComponent(name), { method: 'DELETE', body: { reload: reloadFlag() } })
+            .then(function () { toast(t('filter.deleted'), 'ok'); return openFilter(name); })
+            .catch(function (err) { toast(localizeErr(err), 'err'); })
+            .finally(function () { busy(trigger, false); });
+        });
       return;
     }
 
@@ -5406,34 +5460,41 @@
     }
 
     if (act === 'backup-delete') {
-      if (!confirmDanger(t('set.backupDeleteConfirmInline', { name: name }))) return;
-      api('backup/delete', { method: 'POST', body: { name: name } })
-        .then(function () { toast(t('set.backupDeleted'), 'ok'); return refresh(); })
-        .catch(function (err) { toast(localizeErr(err), 'err'); });
+      confirmDanger(t('set.backupDeleteConfirmInline', { name: name }),
+        { title: t('common.delete'), ok: t('common.delete') })
+        .then(function (yes) {
+          if (!yes) return;
+          return api('backup/delete', { method: 'POST', body: { name: name } })
+            .then(function () { toast(t('set.backupDeleted'), 'ok'); return refresh(); })
+            .catch(function (err) { toast(localizeErr(err), 'err'); });
+        });
       return;
     }
 
     // 恢复是覆盖性操作：先确认，成功后无论 reload 成没成功都要把整页数据重拉，
     // 因为 jail 配置可能已经整片换掉了。reload 失败单独提示，不当作恢复失败。
     if (act === 'backup-restore') {
-      if (!confirmDanger(t('set.backupRestoreConfirm', { name: backupLabel(name) }))) return;
-      busy(trigger, true);
-      api('backup/restore', { method: 'POST', body: { name: name } })
-        .then(function (data) {
-          toast(t('set.backupRestoreDone'), 'ok', 5000);
-          if (data && data.reload && data.reload.ok === false) {
-            toast(t('set.backupRestoreReloadFailed') + (data.reload.error || ''), 'warn', 9000);
-          }
-          // 配置换了，缓存里那些按旧配置渲染的数据全部作废
-          state.settings = null;
-          state.ignoreIpDraft = null;
-          state.jails = [];
-          state.filters = [];
-          state.overview = null;
-          return refresh();
-        })
-        .catch(function (err) { toast(localizeErr(err), 'err', 9000); })
-        .finally(function () { busy(trigger, false); });
+      confirmDanger(t('set.backupRestoreConfirm', { name: backupLabel(name) }),
+        { title: t('set.backupRestore'), ok: t('set.backupRestore') }).then(function (yes) {
+        if (!yes) return;
+        busy(trigger, true);
+        return api('backup/restore', { method: 'POST', body: { name: name } })
+          .then(function (data) {
+            toast(t('set.backupRestoreDone'), 'ok', 5000);
+            if (data && data.reload && data.reload.ok === false) {
+              toast(t('set.backupRestoreReloadFailed') + (data.reload.error || ''), 'warn', 9000);
+            }
+            // 配置换了，缓存里那些按旧配置渲染的数据全部作废
+            state.settings = null;
+            state.ignoreIpDraft = null;
+            state.jails = [];
+            state.filters = [];
+            state.overview = null;
+            return refresh();
+          })
+          .catch(function (err) { toast(localizeErr(err), 'err', 9000); })
+          .finally(function () { busy(trigger, false); });
+      });
       return;
     }
 
@@ -5853,6 +5914,10 @@
 
     document.addEventListener('keydown', function (event) {
       if (event.key === 'Escape') {
+        // 按层级从最上面关：确认框在最上层，它开着时 Esc 只关它，
+        // 不去动下面的抽屉与选择条（否则一次 Esc 连关三层）。
+        var mask = $('#confirmMask');
+        if (mask && !mask.hidden) { closeConfirm(false); return; }
         // 选择条盖在页面之上时优先关它，别把下面的抽屉一起关掉
         if (pickerCtx) { closePicker(); return; }
         closeDrawer();

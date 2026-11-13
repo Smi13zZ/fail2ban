@@ -2091,6 +2091,10 @@ details.raw pre {
   font-weight: 600;
 }
 .modal-body { padding: 16px 18px; font-size: 13.5px; line-height: 1.6; }
+/* 正文带换行时保留换行：存储清理那句话会把「保留几个」逐行列出来，
+   挤成一段长句在手机上要读四五行，逐行才扫得完。
+   white-space 只在带 .multiline 时切换，普通一句话仍是正常折行。 */
+.modal-body.multiline { white-space: pre-line; }
 .modal-foot {
   padding: 14px 18px;
   border-top: 1px solid var(--border);
