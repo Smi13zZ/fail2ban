@@ -2463,6 +2463,16 @@ details.raw pre {
 }
 .upoverlay-box .btn { margin-top: 10px; }
 
+/* 上次升级失败的原因：留在更新页上而不是只闪一次 toast。
+   与状态条之间留 10px，颜色用危险色但不上底色 —— 它是补充信息，不是第二个告警块。 */
+.update-error {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
 /* --------------------------------------------------- 新增页面的响应式 --- */
 @media (max-width: 900px) {
   .evgrid { grid-template-columns: minmax(0, 1fr); }
@@ -2701,6 +2711,23 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
   /* 动作条换行：主要按钮独占一行撑满，次要按钮排在它上面靠右 */
   .card-foot { flex-wrap: wrap; }
   .card-foot .btn.primary { flex: 1 1 100%; }
+
+  /* 两颗按钮排成一行（防护策略的「放弃修改 / 保存并重载」）。
+     默认折行规则是「主要按钮独占一行、次要按钮排在它上面」——两个动作占两行高度，
+     且次要按钮孤零零挂在上面靠右，先看到的是最不该先点的那个。
+     这里让两者均分一行：flex-basis 归零才不会按内容宽度一宽一窄。
+     中英文都放得下（英文最长 Discard changes / Save and reload，各约 100px），
+     所以不像 foot-3 那样按语言分档。 */
+  .card-foot.foot-2 { flex-wrap: nowrap; gap: 8px; }
+  /* cardFoot() 会在按钮前插一个 spacer，桌面端靠它把按钮推到右边。
+     这一行既然要均分，spacer 就是抢走 96px 的第三者 —— 不摘掉时
+     两颗按钮各只有 118px，本该占满的 340px 中间空着一块。 */
+  .card-foot.foot-2 .spacer { display: none; }
+  .card-foot.foot-2 .btn,
+  .card-foot.foot-2 .btn.primary {
+    flex: 1 1 0;
+    min-width: 0;
+  }
 
   /* 三颗等宽按钮排成一行（fn-knock「手动处理」那三颗）。
      只在中文界面启用：中文标签最长 8 个字，均分后每颗 109px 放得下；
