@@ -1,6 +1,6 @@
-# 截图索引（面板 26.11.55）
+# 截图索引（面板 26.11.56）
 
-- 生成时间：2026-11-13 14:35:38
+- 生成时间：2026-11-13 15:41:20
 - 面板地址：http://127.0.0.1:18752/
 - 浏览器：Chrome/156.0.8078.79（CDP 直连，不走 --screenshot）
 - 主题：跟随系统（此环境解出浅色） ／ 语言：zh
@@ -20,16 +20,10 @@
 | `desktop-bans.png` | 封禁管理 | 1440×900 | 封禁管理：2 张卡片、1 处空状态、3 个按钮、侧栏 7 项、标题：当前封禁列表（0/0） / 监控信息 | — |
 | `desktop-filters.png` | 过滤器 | 1440×900 | 过滤器：2 张卡片、2 处空状态、5 个按钮、侧栏 7 项、标题：过滤器列表（0） / 过滤器详情 | — |
 | `desktop-fnknock.png` | fn-knock 联动 | 1440×900 | fn-knock 联动：3 张卡片、10 个按钮、侧栏 7 项、标题：封禁方式 / 当前生效动作 / 生效原理 | — |
-| `desktop-fnknock-mode.png` | fnknock · mode | 1440×900 | fn-knock 联动：3 张卡片、10 个按钮、侧栏 7 项、标题：封禁方式 / 当前生效动作 / 生效原理 | — |
-| `desktop-fnknock-sync.png` | fnknock · sync | 1440×900 | fn-knock 联动：2 张卡片、13 个按钮、侧栏 7 项、标题：黑名单同步 / 手动处理 | — |
-| `desktop-fnknock-conn.png` | fnknock · conn | 1440×900 | fn-knock 联动：1 张卡片、9 个按钮、侧栏 7 项、标题：敲门连接 | — |
-| `desktop-fnknock-status.png` | fnknock · status | 1440×900 | fn-knock 联动：1 张卡片、9 个按钮、侧栏 7 项、标题：探测状态 | — |
-| `desktop-fnknock-list.png` | fnknock · list | 1440×900 | fn-knock 联动：1 张卡片、1 处空状态、9 个按钮、侧栏 7 项、标题：敲门黑名单 | 控制台 1 条 |
-| `desktop-fnknock-log.png` | fnknock · log | 1440×900 | fn-knock 联动：1 张卡片、1 处空状态、8 个按钮、侧栏 7 项、标题：同步记录 | — |
 | `desktop-settings-panel.png` | 设置 · panel | 1440×900 | 设置：1 张卡片、12 个按钮、侧栏 7 项、标题：面板行为 | — |
 | `desktop-settings-appearance.png` | 设置 · appearance | 1440×900 | 设置：1 张卡片、10 个按钮、侧栏 7 项、标题：外观与布局 | — |
 | `desktop-settings-policy.png` | 设置 · policy | 1440×1535 | 设置：1 张卡片、19 个按钮、侧栏 7 项、标题：默认防护策略 | — |
-| `desktop-settings-notify.png` | 设置 · notify | 1440×1341 | 设置：3 张卡片、2 处空状态、23 个按钮、侧栏 7 项、标题：总开关 / 通知渠道 / 投递记录 | — |
+| `desktop-settings-notify.png` | 设置 · notify | 1440×1309 | 设置：3 张卡片、2 处空状态、23 个按钮、侧栏 7 项、标题：总开关 / 通知渠道 / 投递记录 | — |
 | `desktop-settings-maint.png` | 设置 · maint | 1440×1187 | 设置：3 张卡片、2 行表格、19 个按钮、侧栏 7 项、标题：备份与恢复 / 自动备份 / 备份文件 | — |
 | `desktop-settings-storage.png` | 设置 · storage | 1440×900 | 设置：1 张卡片、12 行表格、13 个按钮、侧栏 7 项、标题：空间占用 | — |
 | `desktop-settings-update.png` | 设置 · update | 1440×1010 | 设置：1 张卡片、10 个按钮、侧栏 7 项、标题：版本与更新 | — |
@@ -46,16 +40,10 @@
 | `mobile-bans.png` | 封禁管理 | 780×1688 | 封禁管理：2 张卡片、1 处空状态、3 个按钮、侧栏 7 项、标题：当前封禁列表（0/0） / 监控信息 | — |
 | `mobile-filters.png` | 过滤器 | 780×1688 | 过滤器：2 张卡片、2 处空状态、5 个按钮、侧栏 7 项、标题：过滤器列表（0） / 过滤器详情 | — |
 | `mobile-fnknock.png` | fn-knock 联动 | 780×2168 | fn-knock 联动：3 张卡片、10 个按钮、侧栏 7 项、标题：封禁方式 / 当前生效动作 / 生效原理 | — |
-| `mobile-fnknock-mode.png` | fnknock · mode | 780×2168 | fn-knock 联动：3 张卡片、10 个按钮、侧栏 7 项、标题：封禁方式 / 当前生效动作 / 生效原理 | — |
-| `mobile-fnknock-sync.png` | fnknock · sync | 780×2046 | fn-knock 联动：2 张卡片、13 个按钮、侧栏 7 项、标题：黑名单同步 / 手动处理 | — |
-| `mobile-fnknock-conn.png` | fnknock · conn | 780×1912 | fn-knock 联动：1 张卡片、9 个按钮、侧栏 7 项、标题：敲门连接 | — |
-| `mobile-fnknock-status.png` | fnknock · status | 780×1688 | fn-knock 联动：1 张卡片、9 个按钮、侧栏 7 项、标题：探测状态 | — |
-| `mobile-fnknock-list.png` | fnknock · list | 780×1688 | fn-knock 联动：1 张卡片、1 处空状态、9 个按钮、侧栏 7 项、标题：敲门黑名单 | 控制台 1 条 |
-| `mobile-fnknock-log.png` | fnknock · log | 780×1688 | fn-knock 联动：1 张卡片、1 处空状态、8 个按钮、侧栏 7 项、标题：同步记录 | — |
 | `mobile-settings-panel.png` | 设置 · panel | 780×1688 | 设置：1 张卡片、12 个按钮、侧栏 7 项、标题：面板行为 | — |
 | `mobile-settings-appearance.png` | 设置 · appearance | 780×1688 | 设置：1 张卡片、10 个按钮、侧栏 7 项、标题：外观与布局 | — |
 | `mobile-settings-policy.png` | 设置 · policy | 780×3172 | 设置：1 张卡片、19 个按钮、侧栏 7 项、标题：默认防护策略 | — |
-| `mobile-settings-notify.png` | 设置 · notify | 780×2924 | 设置：3 张卡片、2 处空状态、23 个按钮、侧栏 7 项、标题：总开关 / 通知渠道 / 投递记录 | — |
+| `mobile-settings-notify.png` | 设置 · notify | 780×3014 | 设置：3 张卡片、2 处空状态、23 个按钮、侧栏 7 项、标题：总开关 / 通知渠道 / 投递记录 | — |
 | `mobile-settings-maint.png` | 设置 · maint | 780×2948 | 设置：3 张卡片、2 行表格、19 个按钮、侧栏 7 项、标题：备份与恢复 / 自动备份 / 备份文件 | — |
 | `mobile-settings-storage.png` | 设置 · storage | 780×1934 | 设置：1 张卡片、12 行表格、13 个按钮、侧栏 7 项、标题：空间占用 | — |
 | `mobile-settings-update.png` | 设置 · update | 780×2260 | 设置：1 张卡片、10 个按钮、侧栏 7 项、标题：版本与更新 | — |
@@ -91,7 +79,7 @@
 
 ### 更新页版本对比箭头（desktop）
 
-- 两个版本号：v26.11.55 → v26.11.55
+- 两个版本号：v26.11.56 → v26.11.56
 - 箭头容器：20×20，display=flex；内层 svg：20×20
 - 落点是否在两个版本号之间：是
 

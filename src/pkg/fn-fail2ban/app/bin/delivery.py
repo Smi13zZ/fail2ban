@@ -151,7 +151,8 @@ def list_items(status: str = "all", limit: int = 60) -> dict:
     """按结果筛选的分页读取。
 
     items 是筛选后的前 limit 条；total 是符合筛选条件的总条数；kept 是当前
-    实际保留的总条数（用来在界面上说明环形缓冲的上限）。
+    实际保留的总条数，max 是环形缓冲的上限 —— 两个都带上，界面才能既说清
+    「现在存了几条」也说清「最多能存几条」。
     """
     try:
         limit = max(1, min(int(limit), MAX_KEEP))
@@ -165,7 +166,11 @@ def list_items(status: str = "all", limit: int = 60) -> dict:
         picked = [item for item in records if not item.get("ok")]
     else:
         picked = list(records)
-    return {"items": picked[:limit], "total": len(picked), "kept": len(records)}
+    # fail 是「全部记录里失败的条数」，与当前筛选无关：界面上的失败徽标
+    # 挂在「失败」那个筛选按钮上，切到「成功」时它也必须仍然说真话。
+    failed_total = sum(1 for item in records if not item.get("ok"))
+    return {"items": picked[:limit], "total": len(picked), "kept": len(records),
+            "max": MAX_KEEP, "fail": failed_total}
 
 
 def clear() -> None:
