@@ -2136,15 +2136,46 @@ details.raw pre {
 .upbanner-x svg { width: 16px; height: 16px; }
 
 /* ------------------------------------------------- 侧栏「更新」红点 --- */
-.nav-alert {
+
+/* 侧栏导航项末尾的小红点（有新版本时出现）。
+   它与 .nav-badge（数字徽标）共用一个 span，所以必须把徽标那套尺寸、
+   内边距、底色全部覆盖掉，否则会渲染成一个空的灰色药丸。
+   更要紧的是 .nav-badge:empty { display: none } —— 这条特异度比单写
+   .nav-alert 高，红点永远不显示。这里连 :empty 一起显式声明。
+   2px 的同色描边让它在普通行与反色的激活行上都看得清。 */
+/* 选择器必须写成 .nav button …：激活行的 .nav button.active .nav-badge
+   特异度比 .nav-badge.nav-alert 高，只写后者时红点会被那套「反色药丸」
+   背景盖掉，看起来仍是个灰点。 */
+.nav button .nav-badge.nav-alert,
+.nav button.active .nav-badge.nav-alert,
+.nav .nav-item .nav-badge.nav-alert,
+.nav button .nav-badge.nav-alert:empty,
+.nav button.active .nav-badge.nav-alert:empty,
+.nav .nav-item .nav-badge.nav-alert:empty {
+  display: inline-block;
   flex: 0 0 auto;
+  min-width: 0;
   width: 8px;
   height: 8px;
+  padding: 0;
+  margin-left: auto;
   border-radius: 50%;
   background: var(--danger);
+  color: transparent;
+  font-size: 0;
   box-shadow: 0 0 0 2px var(--bg);
 }
 .nav-alert[hidden] { display: none; }
+/* 收起的窄侧栏：整行只剩居中的图标，红点贴到右缘但仍垂直居中。
+   与展开态读法一致（都在行尾），只是没有文字可以贴。 */
+.app.collapsed .nav .nav-badge.nav-alert:not([hidden]) {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  transform: translateY(-50%);
+  margin-left: 0;
+  box-shadow: none;
+}
 
 /* ------------------------------------------------------ 投递记录 --- */
 .deliv-head {
@@ -2646,14 +2677,22 @@ details.raw pre {
 .workbar button:hover:not(.on) { color: var(--text); }
 
 /* 标签上的小红点（通知有新投递失败、更新有新版本）。
+   绝对定位在按钮的右上角：它不占标签文字的宽度，也不会被长标签挤走 ——
+   作为普通 flex 子项排在文字后面时，会跟标签之间留出一道 5px 的 gap，
+   看起来像「更新 ・」多了个字符。
    不用 .nav-alert 那套 2px --bg 描边：标签条底色是 --muted，
    描边会变成一圈灰环，看起来像坏掉的环形图标。 */
+.workbar button { position: relative; }
 .workbar-dot {
-  flex: 0 0 auto;
+  position: absolute;
+  top: 4px;
+  right: 4px;
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--danger);
+  flex: 0 0 auto;
+  pointer-events: none;
 }
 
 /* fn-knock：标签条 + 右端两个页面动作。
