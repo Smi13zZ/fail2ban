@@ -3155,12 +3155,39 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
 /* 限高滚动区：表头 sticky 时必须有独立滚动容器。
    overflow-x 显式给 hidden：只写 overflow-y:auto 时，另一个方向会被算成 auto，
    于是这张表除了竖着滚还能横着拖 —— 而横着拖出去的只是 .table-wrap 的左右留白。 */
-.bscroll { max-height: 300px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+/* 限高滚动区：表头 sticky 时必须有独立滚动容器。
+   盒子高度按「表头 36px + 5 行 × 42px = 246px」定死，而不是给个大概的 300px ——
+   除不尽的余数会把第 6 行切成半截，看着像列表被裁断、也不像能滚动的样子。 */
+.bscroll {
+  max-height: 246px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* 让滚动条始终可见：这条列表只露 5 行，没有滚动条时用户不知道下面还有。
+     Chromium 走 ::-webkit-scrollbar，Firefox 走 scrollbar-width。 */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+.bscroll::-webkit-scrollbar { width: 6px; }
+.bscroll::-webkit-scrollbar-track { background: transparent; }
+.bscroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+.bscroll:hover::-webkit-scrollbar-thumb { background: var(--faint); }
 /* .table-wrap 的负边距是给「铺满卡片左右边缘的横向滚动表」用的；
    套进 .bscroll 这种限高滚动盒里，负边距会把内容顶出盒子一圈：
    横向多出 16px（能左右滑）、纵向把盒子压矮 16px（最后一行的按钮被切一半）。
    在滚动盒里取消它，让表格按盒宽自然排。 */
-.bscroll > .table-wrap { margin: 0; padding: 0; }
+.bscroll > .table-wrap {
+  margin: 0;
+  padding: 0;
+  /* 关键：overflow-x:auto 会把这一层变成滚动容器，表头的 position:sticky
+     就贴在它身上（而它本身不纵向滚动），于是表头跟着内容一起滚走。
+     滚动交给外层 .bscroll，这一层不参与滚动。 */
+  overflow: visible;
+}
 /* 存储明细只有几行，不需要 300px 的滚动盒（会把最后一行切成两半），
    只有视口很矮时才启用滚动。
    这两个表格本身就可能比卡片宽（路径列很长），横滚要留给里面的 .table-wrap，
@@ -3253,6 +3280,9 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
   .ttable.tbackup td:nth-child(2) { display: none; }
   .ttable.tbackup th.acts-col,
   .ttable.tbackup td.acts-col { width: 140px; }
+  /* 手机上同样只露 5 行：自动备份一天一份，不封顶时这张卡会一路撑到
+     屏幕外，下面的卡片全被顶走。高度与行高保持一致（36 + 5 × 42）。 */
+  .bscroll { max-height: 246px; }
 }
 
 /* 维护页的自动备份表单：两列网格，字段间距与卡片内其它块一致 */
