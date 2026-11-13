@@ -109,6 +109,22 @@
       </div>
     </header>
 
+    <!-- 新版本提示条：整页级，出现在每个页面顶部（顶栏之下、内容之上），
+         点「查看详情」跳到设置里的更新分区，点「一键更新」直接开升级流程，
+         关掉之后本次访问不再出现（下次打开面板若仍有新版本还会提醒）。 -->
+    <div class="upbanner" id="upBanner" hidden>
+      <span class="upbanner-ic" id="upBannerIcon" aria-hidden="true"></span>
+      <div class="upbanner-text">
+        <b id="upBannerTitle">发现新版本</b>
+        <span id="upBannerSub"></span>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn sm upbanner-btn" type="button" id="upBannerDetail">查看详情</button>
+      <button class="btn sm primary" type="button" id="upBannerInstall">一键更新</button>
+      <button class="icon-btn ghost upbanner-x" type="button" id="upBannerClose"
+              title="关闭" aria-label="关闭"><span id="upBannerCloseIcon"></span></button>
+    </div>
+
     <main id="view"></main>
   </div>
 </div>

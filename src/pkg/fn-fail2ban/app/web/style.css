@@ -2061,6 +2061,41 @@ details.raw pre {
 .chip.err { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
 .chip.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
 
+/* --------------------------------------------- 新版本提示条（每个页面） --- */
+
+/* 一条横贯内容区的提示，出现在所有页面顶部：图标 + 标题/副标题 + 右侧动作。
+   与「设置 → 更新」里的状态条同源，但位置在页面级，所以从任何一页都能看到
+   有新版本，而不是先进设置才知道。 */
+.upbanner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  /* 与 main 同一套左右内边距，横幅和下面的卡片左右对齐 */
+  margin: 16px 18px 0;
+  padding: 11px 14px;
+  border: 1px solid color-mix(in srgb, var(--warn) 42%, var(--border));
+  background: color-mix(in srgb, var(--warn) 9%, var(--card));
+  border-radius: var(--radius-lg);
+  /* 横幅出现时它下面的 main 已经有 16px 上内边距，这里不再叠加 margin-bottom */
+  flex: 0 0 auto;
+}
+.upbanner[hidden] { display: none; }
+.upbanner-ic {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  color: var(--warn);
+}
+.upbanner-ic svg { width: 22px; height: 22px; }
+.upbanner-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1 1 auto; }
+.upbanner-text b { font-size: 13.5px; font-weight: 600; }
+.upbanner-text span { font-size: 12px; color: var(--dim); }
+.upbanner-x { width: 28px; height: 28px; flex: 0 0 28px; }
+.upbanner-x svg { width: 16px; height: 16px; }
+
 /* ------------------------------------------------- 侧栏「更新」红点 --- */
 .nav-alert {
   flex: 0 0 auto;
@@ -2356,7 +2391,7 @@ details.raw pre {
   inset: 0;
   z-index: 95;
   padding: 20px;
-  background: rgba(0, 0, 0, .55);
+  background: rgba(0, 0, 0, .5);
   display: grid;
   place-items: center;
 }
@@ -2427,7 +2462,10 @@ details.raw pre {
   height: 100%;
   width: 0;
   border-radius: 999px;
-  background: var(--accent-bar);
+  /* 进度条用主色（浅色主题下是近黑），不用配置里的蓝色强调色：
+     升级弹窗上这条是「还剩多少」的刻度，黑白更接近系统安装器，
+     蓝色会被读成一次操作而不是一次进度。 */
+  background: var(--primary);
   transition: width .25s ease;
 }
 .upprog-meta {
@@ -2708,6 +2746,17 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
   /* 标签条按钮与桌面同高：它已经贴在分段控件里，上下各有 4px 内边距，
      再加高只会让整条标签条比卡片标题还厚。左右留白收窄，让 9 个标签少滚一段。 */
   .workbar button { height: 30px; padding: 0 12px; }
+  /* 新版本提示条：手机上标题占第一行，主按钮独占第二行（拇指够得到），
+     关闭按钮贴着第一行右端。与另一条产品线同一套排法。 */
+  .upbanner { gap: 8px; padding: 10px 12px; margin: 10px 12px 0; }
+  .upbanner .spacer { display: none; }
+  .upbanner-btn { display: none; }
+  .upbanner-ic { order: 1; }
+  .upbanner-text { order: 2; flex: 1 1 calc(100% - 44px); }
+  .upbanner-text b { font-size: 13px; }
+  .upbanner .btn.primary { order: 3; flex: 1 1 auto; }
+  .upbanner-x { order: 4; }
+
   /* 动作条换行：主要按钮独占一行撑满，次要按钮排在它上面靠右 */
   .card-foot { flex-wrap: wrap; }
   .card-foot .btn.primary { flex: 1 1 100%; }

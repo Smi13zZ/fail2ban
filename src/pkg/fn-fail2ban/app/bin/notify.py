@@ -339,13 +339,15 @@ EVENT_TYPES = [
     {"key": "unban", "label": "解封 IP", "help": "封禁被解除时推送（较嘈杂）"},
     {"key": "serviceDown", "label": "服务异常", "help": "fail2ban 失去响应时推送"},
     {"key": "serviceRecover", "label": "服务恢复", "help": "fail2ban 恢复响应时推送"},
+    {"key": "update", "label": "面板新版本", "help": "发现面板自身有新版本时推送"},
 ]
 
 DEFAULT_SETTINGS = {
     "enabled": False,
     "browserNotify": False,
     "pollInterval": 30,
-    "events": {"ban": True, "unban": False, "serviceDown": True, "serviceRecover": True},
+    "events": {"ban": True, "unban": False, "serviceDown": True,
+               "serviceRecover": True, "update": True},
     "channels": [],
 }
 

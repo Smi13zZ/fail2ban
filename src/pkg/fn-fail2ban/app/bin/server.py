@@ -38,7 +38,7 @@ import store  # noqa: E402
 import update  # noqa: E402
 
 APP_NAME = os.environ.get("TRIM_APPNAME") or "fn-fail2ban"
-APP_VERSION = "26.11.50"
+APP_VERSION = "26.11.51"
 PORT = int(os.environ.get("TRIM_SERVICE_PORT") or os.environ.get("F2B_PORT") or 18752)
 BIND_ADDR = os.environ.get("F2B_BIND") or "0.0.0.0"
 READY_FILE = os.environ.get("F2B_READYFILE") or os.path.join(store.VAR_DIR, "server.ready")
@@ -1931,13 +1931,31 @@ def main() -> int:
     threading.Thread(target=_startup_housekeeping, daemon=True).start()
 
     # 版本自检：与浏览器开没开无关，启动 60 秒后查第一次、之后每小时一次。
+    # 发现新版本时除了写日志，还按「面板新版本」事件推一条通知 —— 这个事件
+    # 与封禁/解封走同一套渠道与投递记录，用户不必盯着面板才知道有新版。
+    def _announce_update(info):
+        latest = str(info.get("latest") or "").strip()
+        current = app_version()
+        title = notify.bilingual_title("Fail2ban 面板有新版本", "Fail2ban panel update available")
+        text = notify.bilingual_text(
+            ["当前版本：%s" % (current or "未知"),
+             "最新版本：%s" % (latest or "未知"),
+             "时间：%s" % time.strftime("%Y-%m-%d %H:%M:%S")],
+            ["Current version: %s" % (current or "unknown"),
+             "Latest version: %s" % (latest or "unknown"),
+             "Time: %s" % time.strftime("%Y-%m-%d %H:%M:%S")],
+        )
+        event = notify.record_event("update", title, text)
+        notify.dispatch(event)
+
     try:
         threading.Thread(
             target=update.poll_loop,
             args=(lambda: {"update": {"check": True, "repo": ""}},
                   lambda msg: print("[%s] %s" % (time.strftime("%F %T"), msg), flush=True),
                   threading.Event()),
-            kwargs={"initial_delay": 60, "interval": 3600},
+            kwargs={"initial_delay": 60, "interval": 3600,
+                    "notify": _announce_update},
             daemon=True,
         ).start()
     except Exception as exc:  # noqa: BLE001 - 版本自检起不来不能挡住面板
