@@ -2223,6 +2223,7 @@
         state.update.lastCheckAt = Date.now();
         state.update.lastFailAt = 0;
         paintUpdateDot();
+        paintUpdateBanner();
       }));
     } else if (tab === 'guide') {
       // 「说明」列的是真实路径与端口：settings 给写入位置，fnknock 给敲门那几张
@@ -2245,6 +2246,7 @@
     host.innerHTML = html;
     paintUpdateDot();
     paintNotifyDot();
+    paintUpdateBanner();
   }
 
   function settingsWorkbarHtml() {
@@ -2829,9 +2831,11 @@
     // 卡片头「标题 + 间隙 + 行内动作」，动作紧贴标题右侧，不再单独占一行。
     var html = '';
 
+    // ch-inline：窄屏默认是「标题独占整行、动作换到下一行」，这里只有一颗
+    // 「保存设置」，照那条走会白占一整行 —— 与通知渠道、投递记录两张卡不一致。
     html += '<div class="card">' + cardHead(t('notify.masterTitle'),
       '<button class="btn sm primary" data-act="notif-save">' +
-      t('common.saveSettings') + '</button>') +
+      t('common.saveSettings') + '</button>', 'ch-inline') +
       '<div class="help help-tight">' + esc(t('notify.hint')) + '</div>' +
       '<div class="swrow">' +
       '<div class="swtext"><div class="swname">' + esc(t('notify.enablePush')) + '</div>' +
@@ -3517,11 +3521,58 @@
   }
 
 
+  // 侧栏「设置」入口与设置页「更新」标签各一个红点，来源同一个 has_update。
+  // 标签条那个只在设置页里存在（每次重绘重建），所以两个 id 分开查、各自判空。
   function paintUpdateDot() {
-    var dot = $('#navUpdateDot');
-    if (!dot) return;
     var info = updateInfo();
-    dot.hidden = !(info && info.has_update);
+    var on = !!(info && info.has_update);
+    var navDot = $('#navUpdateDot');
+    if (navDot) navDot.hidden = !on;
+    var tabDot = $('#setUpdateDot');
+    if (tabDot) tabDot.hidden = !on;
+  }
+
+  /* 新版本提示条：每个页面都出现，直到用户关掉它。
+     与「设置 → 更新」里的状态条同源（state.update），所以两边不会打架：
+     检查出有新版 → 横幅出现；点「立即升级」→ 直接进升级流程；
+     点「查看详情」→ 跳到设置里的更新分区看发布说明。 */
+  var upBannerDismissed = false;
+
+  var UPBANNER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.1 5.2 5.6.4-4.3 3.6 1.4 5.4-4.8-3-4.8 3 1.4-5.4-4.3-3.6 5.6-.4z"/></svg>';
+  var UPBANNER_CLOSE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+  function paintUpdateBanner() {
+    var banner = $('#upBanner');
+    if (!banner) return;
+    var info = updateInfo() || {};
+    var current = (info.current || (state.meta && state.meta.app && state.meta.app.version) || '');
+    var show = !!info.has_update && !upBannerDismissed;
+    banner.hidden = !show;
+    if (!show) return;
+    var icon = $('#upBannerIcon');
+    if (icon && !icon.firstChild) icon.innerHTML = UPBANNER_ICON;
+    var closeIcon = $('#upBannerCloseIcon');
+    if (closeIcon && !closeIcon.firstChild) closeIcon.innerHTML = UPBANNER_CLOSE_ICON;
+    var title = $('#upBannerTitle');
+    if (title) title.textContent = t('update.bannerTitle', { latest: info.latest || '—', current: current || '—' });
+    var sub = $('#upBannerSub');
+    if (sub) sub.textContent = t('update.bannerSub');
+    var detail = $('#upBannerDetail');
+    if (detail) detail.textContent = t('update.bannerDetail');
+    var install = $('#upBannerInstall');
+    if (install) install.textContent = t('update.install');
+  }
+
+  function dismissUpdateBanner() {
+    upBannerDismissed = true;
+    paintUpdateBanner();
+  }
+
+  function openUpdateSection() {
+    setSettingsTab('update');
+    setView('settings', 'update');
   }
 
   // 版本检查有独立节流：成功查过 30 分钟内不再自动查，失败只冷却 5 分钟
@@ -3550,6 +3601,7 @@
         state.update.lastCheckAt = Date.now();
         state.update.lastFailAt = 0;
         paintUpdateDot();
+        paintUpdateBanner();
         if (force && info && info.has_update) {
           toast(t('update.foundToast', { version: info.latest }), 'ok', 4000);
         } else if (force && info && info.ok !== false) {
@@ -3784,7 +3836,7 @@
       if (pct) pct.textContent = "100%";
       var bytes = $("#upProgBytes");
       if (bytes) bytes.textContent = "";
-      paintUpStage(t("update.done"));
+      paintUpStage(t("update.done", { v: (prog && prog.current) || "" }));
     } else if (kind === "timeout") {
       paintUpStage(t("update.pollTimeout"));
     } else {
@@ -3794,7 +3846,7 @@
     var reload = $("#upReload");
     if (reload) reload.hidden = false;
     if (ok) {
-      toast(t("update.done"), "ok", 4000);
+      toast(t("update.done", { v: (prog && prog.current) || "" }), "ok", 4000);
       setTimeout(function () { location.reload(); }, 1500);
     } else if (kind === "timeout") {
       state.update.error = t("update.pollTimeout");
@@ -5697,6 +5749,18 @@
     // 升级遮罩：「立即重新加载」与超时后的手动兜底
     var upReloadBtn = $('#upReload');
     if (upReloadBtn) upReloadBtn.addEventListener('click', function () { location.reload(); });
+
+    // 新版本提示条上的三个动作
+    var bannerDetail = $('#upBannerDetail');
+    if (bannerDetail) bannerDetail.addEventListener('click', function () {
+      openUpdateSection();
+    });
+    var bannerInstall = $('#upBannerInstall');
+    if (bannerInstall) bannerInstall.addEventListener('click', function () {
+      startUpgrade(bannerInstall);
+    });
+    var bannerClose = $('#upBannerClose');
+    if (bannerClose) bannerClose.addEventListener('click', dismissUpdateBanner);
     // 页面开着时每 30 分钟查一次新版本；visibilitychange 变可见且已过期时补查
     updateTimer = setInterval(onUpdateTick, 60000);
 
@@ -5815,6 +5879,7 @@
           state.update.info = info;
           state.update.lastCheckAt = Date.now();
           paintUpdateDot();
+          paintUpdateBanner();
         }).catch(function () { /* 更新接口不可用不影响主流程 */ });
       });
   }
