@@ -181,36 +181,76 @@ def _is_package(name):
     return False
 
 
+def package_dirs(var_dir):
+    """安装包可能落盘的全部目录，按优先级排列。
+
+    有两个来源，缺一个都会让「安装包缓存」显示成空的：
+
+    1. @apphome 下的工作区 —— 一键升级真正下载安装包的地方（卸载不清空，
+       包放在那里才能活过 uninstall → install）；
+    2. @appdata/update —— 历史位置。早期版本与手工放进去的包可能还留着。
+
+    只用第 2 个是这里长期空着的根因：下载从来没往那里写过。
+    """
+    dirs = []
+    try:
+        import installer as installer_mod
+    except Exception:
+        installer_mod = None
+    if installer_mod is not None:
+        try:
+            work = installer_mod.package_dir(var_dir)
+        except Exception:
+            work = ""
+        if work:
+            dirs.append(work)
+    legacy = update_dir(var_dir)
+    if legacy:
+        dirs.append(legacy)
+    seen = set()
+    out = []
+    for d in dirs:
+        real = os.path.realpath(d)
+        if real in seen:
+            continue
+        seen.add(real)
+        out.append(d)
+    return out
+
+
 def updates_list(var_dir):
-    """update/ 下的安装包与半截下载，新的在前。
+    """安装包与半截下载，新的在前。
 
     partial 标出没传完的文件：它们永远装不上，页面上标出来，用户才能理解
     「清理为什么能腾出这几个 MB」。
     """
-    d = update_dir(var_dir)
     out = []
-    if not d or not os.path.isdir(d):
-        return out
-    try:
-        names = os.listdir(d)
-    except OSError:
-        return out
-    for name in names:
-        if not _is_package(name):
-            continue
-        path = os.path.join(d, name)
-        if not os.path.isfile(path):
+    seen = set()
+    for d in package_dirs(var_dir):
+        if not d or not os.path.isdir(d):
             continue
         try:
-            stat = os.stat(path)
+            names = os.listdir(d)
         except OSError:
             continue
-        out.append({
-            "name": name,
-            "bytes": int(stat.st_size),
-            "t": int(stat.st_mtime),
-            "partial": _is_partial(name),
-        })
+        for name in names:
+            if not _is_package(name) or name in seen:
+                continue
+            path = os.path.join(d, name)
+            if not os.path.isfile(path):
+                continue
+            try:
+                stat = os.stat(path)
+            except OSError:
+                continue
+            seen.add(name)
+            out.append({
+                "name": name,
+                "bytes": int(stat.st_size),
+                "t": int(stat.st_mtime),
+                "dir": d,
+                "partial": _is_partial(name),
+            })
     out.sort(key=lambda item: item["t"], reverse=True)
     return out
 
@@ -249,14 +289,19 @@ def snapshots_list(var_dir):
 # ---------------------------------------------------------------------------
 
 #: (key, 中文标签, var_dir 下的相对路径, kind, nested)。
-#: nested=True 表示这一项位于另一个已列出的目录内部：升级安装日志在 update/ 里，
-#: 再算一遍总量会让「合计」比目录实际占用还大。
+#: nested=True 表示这一项位于另一个已列出的目录内部，再算一遍总量会让「合计」
+#: 比目录实际占用还大。
+#: update_dir 的路径在 _layout_paths() 里单独解析 —— 安装包真正落在 @apphome 下，
+#: 这里的 ("update",) 只是拿不到 installer 时的退路。
 LAYOUT = (
     ("update_dir", "更新缓存", ("update",), "dir", False),
     ("backup_dir", "配置快照", ("backup",), "dir", False),
     ("server_log", "运行日志", ("server.log",), "file", False),
     ("server_log1", "运行日志（上一份）", ("server.log.1",), "file", False),
-    ("install_log", "升级安装日志", ("update", "install.log"), "file", True),
+    # install.log 在 @appdata/update 里，而「更新缓存」那一行现在指的是
+    # @apphome 下的安装包目录 —— 两者已经不是同一棵树，不能再标 nested
+    # （标了会被算成「已计入上级目录」，实际它一分钱都没算进合计）。
+    ("install_log", "升级安装日志", ("update", "install.log"), "file", False),
     ("deliveries", "通知投递记录", ("deliveries.json",), "file", False),
     ("events", "通知事件记录", ("events.json",), "file", False),
     ("notifications", "通知设置", ("notifications.json",), "file", False),
@@ -303,14 +348,31 @@ def _resolve_keep(keep, default, low, high):
     return max(low, min(high, value))
 
 
+def _layout_paths(var_dir):
+    """把 LAYOUT 展开成 (key, label, 绝对路径, kind, nested)。
+
+    「更新缓存」这一行必须指向安装包真正落盘的位置：它在 @apphome 下，
+    不在 @appdata 里。按字面量拼 var_dir/update 会得到一个恒为 0 的行，
+    合计占用也就永远漏掉安装包那几 MB。
+    """
+    rows = []
+    for key, label, parts, kind, nested in LAYOUT:
+        if key == "update_dir":
+            dirs = package_dirs(var_dir)
+            path = dirs[0] if dirs else (os.path.join(var_dir, "update") if var_dir else "")
+        else:
+            path = os.path.join(var_dir, *parts) if var_dir else ""
+        rows.append((key, label, path, kind, nested))
+    return rows
+
+
 def report(var_dir, current_version="", backups=None, keep=None):
     """目录占用 + 更新包 + 备份清单，就是「存储」页要的那份数据。"""
     var_dir = var_dir or ""
     keep_n = _resolve_keep(keep, BACKUP_KEEP, 1, BACKUP_KEEP_MAX)
     rows = []
     total = 0
-    for key, label, parts, kind, nested in LAYOUT:
-        path = os.path.join(var_dir, *parts) if var_dir else ""
+    for key, label, path, kind, nested in _layout_paths(var_dir):
         if kind == "dir":
             size, files = _dir_size(path)
         else:
@@ -337,6 +399,7 @@ def report(var_dir, current_version="", backups=None, keep=None):
         "keep": int(keep_n),
         "current_version": str(current_version or ""),
         "packages": updates_list(var_dir),
+        "packages_dir": (package_dirs(var_dir) or [""])[0],
         "updates_keep": UPDATES_KEEP,
         "snapshot_keep": SNAPSHOT_KEEP,
     }
@@ -495,10 +558,11 @@ def purge_update_cache(var_dir, keep=UPDATES_KEEP, protect_version="", busy=None
         keep = UPDATES_KEEP
     keep = max(0, min(UPDATES_KEEP_MAX, keep))
     protect = str(protect_version or "").strip().lstrip("vV")
-    d = update_dir(var_dir)
+    dirs = [p for p in package_dirs(var_dir) if p] + [update_dir(var_dir)]
+    dirs = [p for p in dirs if p and os.path.isdir(p)]
     out = {"removed": [], "kept": [], "count": 0, "freed": 0, "skipped": ""}
-    if not d or not os.path.isdir(d):
-        out["skipped"] = "no_update_dir"
+    if not dirs:
+        out["skipped"] = "no_package_dir"
         return out
 
     running = installer_busy() if busy is None else bool(busy)
@@ -523,8 +587,18 @@ def purge_update_cache(var_dir, keep=UPDATES_KEEP, protect_version="", busy=None
         if running:
             # 这个 .part 可能就是正在传输的那一个，安装脚本此刻也在写同目录。
             continue
-        path = os.path.join(d, name)
-        if not _within(path, d):
+        # 包可能在两个目录里的任意一个：优先用列表里记下的来源目录，
+        # 取不到就逐个候选目录找一遍。只在「候选目录本身」这个边界内删，
+        # 不能用 dirname(path) 当边界 —— 那样等于没设边界。
+        path = ""
+        for folder in [item.get("dir") or ""] + dirs:
+            if not folder:
+                continue
+            guess = os.path.join(folder, name)
+            if os.path.isfile(guess) and _within(guess, folder):
+                path = guess
+                break
+        if not path:
             continue
         try:
             os.remove(path)

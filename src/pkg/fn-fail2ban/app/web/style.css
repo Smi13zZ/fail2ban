@@ -2365,14 +2365,53 @@ details.raw pre {
 /* 手机上路径列读不出信息（一屏只剩「/vol1/@appda…」），整列收起，宽度让给
    项目名与大小；桌面端仍是四列。 */
 @media (max-width: 720px) {
-  /* 窄屏默认给表格 560px 下限、超出横向滚动；这一张的列已经按语义收窄，
-     再套那个下限只会把「大小 / 文件数」推到屏幕外，所以取消下限让它就地排开。 */
+  /* 窄屏默认给表格 560px 下限、超出横向滚动；存储页这两张表的列已经按语义
+     收窄过，再套那个下限只会把「大小 / 文件数」推到屏幕外，所以取消下限让它
+     就地排开。选择器必须带上 .ttable 与 .table-wrap 两层：
+     ≤720px 里先有一条 .table-wrap table { min-width: 560px }，
+     只写 .ttable 会被它按特异性压过去。 */
   .table-wrap table.ttable { min-width: 0; }
-  .ttable.tfixed th:nth-child(4),
-  .ttable.tfixed td:nth-child(4) { display: none; }
-  .ttable.tfixed th:nth-child(2), .ttable.tfixed td:nth-child(2) { width: 74px; }
-  .ttable.tfixed th:nth-child(3), .ttable.tfixed td:nth-child(3) { width: 60px; }
+
+  /* ---- 存储明细表：手机端不再左右滑 ---- */
+  /* 路径列在 390px 下只剩「/vol1/@appda…」，读不出信息还占掉一半宽度，
+     整列收起；路径改为挂在项目名下面那一行小字里（.sub），
+     名称与大小两列就地排开，纵向多少行就多少行，不需要横向滚动。
+     选择器要写到 .table-wrap table.ttable.tstorage 这一串：本文件上方还有一条
+     .table-wrap table:not(.fixed) { table-layout: auto }（0,2,1），
+     只写 .ttable.tstorage（0,2,0）会被它压回 auto —— 那样列宽又按内容算，
+     表格比视口宽一截，横向滑动就又回来了。 */
+  .table-wrap table.ttable.tstorage {
+    table-layout: fixed;
+    width: 100%;
+    min-width: 0;
+  }
+  .ttable.tstorage th:nth-child(3),
+  .ttable.tstorage td:nth-child(3) { display: none; }
+  /* 大小列定宽、项目列吃剩余：定宽之后长名字走省略号，不会把表格撑出去 */
+  .ttable.tstorage th:nth-child(2),
+  .ttable.tstorage td:nth-child(2) { width: 76px; }
+  .ttable.tstorage th:nth-child(1),
+  .ttable.tstorage td:nth-child(1) { width: auto; min-width: 0; }
   .ttable.tstorage td, .ttable.tstorage th { padding-left: 8px; padding-right: 8px; }
+  /* 路径行按「尾部优先」截断：/vol1/@appdata/fn-fail2ban/server.log
+     在右边被切掉就看不出这是哪个文件了。 */
+  .ttable.tstorage .sname .sub { max-width: 100%; }
+
+  /* ---- 安装包缓存表：同样两列就地排开 ---- */
+  .table-wrap table.ttable.tpkg { table-layout: fixed; width: 100%; min-width: 0; }
+  .ttable.tpkg th:nth-child(2),
+  .ttable.tpkg td:nth-child(2) { width: 76px; }
+  .ttable.tpkg th:nth-child(1),
+  .ttable.tpkg td:nth-child(1) { width: auto; min-width: 0; }
+
+  /* 备份表在 ≤720px 已经收掉大小列，这里只保证它不溢出 */
+  .table-wrap table.ttable.tbackup { width: 100%; }
+
+  /* 外层滚动盒跟着关掉横向滚动：里面两张表都不再比视口宽，留着它只会在
+     390px 下留一条永远不动、却吃掉一截高度的横向滚动槽。
+     多挂一层 .card 是为了压过文件下方那条 .bscroll.storage-scroll ——
+     它把 overflow 整体写成 visible，特异性与这里相同但位置更靠后。 */
+  .card .bscroll.storage-scroll { overflow-x: hidden; }
 }
 
 .relnotes {
@@ -3232,13 +3271,16 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
      滚动交给外层 .bscroll，这一层不参与滚动。 */
   overflow: visible;
 }
-/* 存储明细只有几行，不需要 300px 的滚动盒（会把最后一行切成两半），
-   只有视口很矮时才启用滚动。
-   这两个表格本身就可能比卡片宽（路径列很长），横滚要留给里面的 .table-wrap，
-   所以这里把 overflow 整体放开，不做成双向滚动盒。 */
+/* 存储明细默认不设高度上限：整页本来就能滚，再套一层内滚动会出现
+   「滚动里套滚动」，滚轮到底后手指还得换个区域继续滚。
+   横滚留给里面的 .table-wrap，这一层默认完全不滚动。 */
 .bscroll.storage-scroll { max-height: none; overflow: visible; }
-@media (max-height: 900px) {
-  .bscroll.storage-scroll { max-height: 330px; overflow-x: visible; overflow-y: auto; }
+/* 只有视口真的很矮（横屏手机、小窗口）才收成滚动盒：整页本来就能滚，
+   再套一层内滚动会出现「滚动里套滚动」，滚轮到底后手指还得换个区域继续。
+   330px 这种随手的数字会把最后一行切成半截（表头 36 + 行 46 = 82 一格），
+   所以按整行算：36 + 6 × 46 = 312px，正好 6 行，不留半行。 */
+@media (max-height: 700px) {
+  .bscroll.storage-scroll { max-height: 312px; overflow-x: visible; overflow-y: auto; }
 }
 
 /* 表头 sticky：滚动时列名不跟着走；背景色必须显式给，
