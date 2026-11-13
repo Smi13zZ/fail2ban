@@ -588,6 +588,7 @@
       applySidebarPref(meta.prefs.sidebar);
       applyLangPref(meta.prefs.lang);
       $('#app').classList.add('ready');
+      resumePendingUpgrade();
       // 首次渲染完成后再撤掉首屏占位，避免中间闪一下空白
       var splash = $('#bootSplash');
       // 预取通知设置，以便启用浏览器通知时立即开始轮询
@@ -597,6 +598,29 @@
       }).catch(function () { /* 通知接口不可用不影响主流程 */ });
       return refresh().finally(function () { if (splash) splash.hidden = true; });
     });
+  }
+
+  /* 刷新之后接着跟这次升级。
+     升级要卸载重装，页面必然被打断一次；如果用户在这期间刷新了页面
+     （或者浏览器自己重载了），旧代码就再也不知道「刚才有个升级在跑」——
+     面板回来了却什么都不说，只能靠用户自己去点检查更新。
+     sessionStorage 里留着升级前的版本号，这里比对一次：版本变了说明升级成了，
+     没变就继续轮询到它变或超时。 */
+  function resumePendingUpgrade() {
+    var before = '';
+    try { before = sessionStorage.getItem('f2b-upgrading') || ''; } catch (e) { return; }
+    if (!before) return;
+    var now = (state.meta && state.meta.app && state.meta.app.version) || '';
+    if (now && now !== before) {
+      // 已经升级完成：清掉标记，正常进入新版本
+      try { sessionStorage.removeItem('f2b-upgrading'); } catch (e) { /* ignore */ }
+      return;
+    }
+    // 版本没变：还在升级途中，接着显示遮罩与轮询
+    state.update.before = before;
+    openUpOverlay(t('update.upgrading'));
+    paintUpStage(t('update.installingWait'));
+    pollUpdateProgress();
   }
 
   /* ------------------------------------------------------- 概览自动刷新 */
@@ -3775,16 +3799,25 @@
     }
   }
 
+  // 升级最多等多久。装一次是「停服务 → 卸载 → 装 → 启动」，
+  // fnOS 的 install-local 与 appcenter-cli start 各要十几秒到一分钟，
+  // 实测整轮 60~150 秒。原先按「连续失败 180 次 × 400ms = 72 秒」判定超时，
+  // 慢一点的机器必然在面板还没回来时就放弃 —— 界面停在那里不动，
+  // 只有「立即重新加载」能救，看起来就是「不能自动重载」。
+  // 改成按时间预算：10 分钟内一直等，期间接口失败全部当作「面板暂时不在」。
+  var UPDATE_WAIT_MS = 10 * 60 * 1000;
+
   // 装完的判据：面板版本号变了（升级过程中服务会停止，接口连续失败属正常）。
-  // 找不到版本变化就一直容忍，直到次数上限。
   function pollUpdateProgress() {
-    var tries = 0;
-    var fails = 0;
+    var deadline = Date.now() + UPDATE_WAIT_MS;
     stopUpdatePoll();
     state.update.poll = setInterval(function () {
-      tries += 1;
+      if (Date.now() > deadline) {
+        stopUpdatePoll();
+        finishUpgrade(false, null, 'timeout');
+        return;
+      }
       api('update/progress').then(function (prog) {
-        fails = 0;
         paintUpProgress(prog);
         var phase = String((prog && prog.phase) || '').toLowerCase();
         if (phase === 'failed' || phase === 'error') {
@@ -3807,17 +3840,9 @@
           }
         }).catch(function () { /* 升级中 meta 也可能短暂失败 */ });
       }).catch(function () {
-        fails += 1;
-        // 升级期间服务会重启：容忍到 180 次，之后才判定超时
-        if (fails >= 180) {
-          stopUpdatePoll();
-          finishUpgrade(false, null, 'timeout');
-        }
+        // 升级期间服务会重启，接口连续失败是正常过程 ——
+        // 只要还在时间预算内就继续等它回来，不再按次数提前放弃。
       });
-      if (tries > 900) {
-        stopUpdatePoll();
-        finishUpgrade(false, null, 'timeout');
-      }
       // 400ms：安装包不到 1 MB，千兆内网一秒内就下完，
       // 间隔拉长只能抓到一两个中间值，进度条看起来像「直接跳到 100%」。
     }, 400);
@@ -3846,12 +3871,15 @@
     var reload = $("#upReload");
     if (reload) reload.hidden = false;
     if (ok) {
+      try { sessionStorage.removeItem('f2b-upgrading'); } catch (e) { /* ignore */ }
       toast(t("update.done", { v: (prog && prog.current) || "" }), "ok", 4000);
       setTimeout(function () { location.reload(); }, 1500);
     } else if (kind === "timeout") {
       state.update.error = t("update.pollTimeout");
       toast(t("update.pollTimeout"), "warn", 9000);
     } else {
+      // 后端明确报失败：没有升级在跑，别让下次刷新还弹「正在升级」
+      try { sessionStorage.removeItem('f2b-upgrading'); } catch (e) { /* ignore */ }
       var detail = (prog && (prog.detail || prog.error)) || "";
       state.update.error = detail
         ? t("update.installFailDetail", { detail: localizedSource(detail, "common.unknownError") })
@@ -3868,6 +3896,12 @@
     if (!confirmDanger(t("update.installConfirm", { version: target || "—" }))) return;
     state.update.before = (state.meta && state.meta.app && state.meta.app.version) || "";
     state.update.error = "";
+    // 升级期间页面可能被用户手动刷新（或者浏览器崩溃后恢复）。
+    // 把「正在升级 + 升级前版本」留在 sessionStorage 里，重新载入时
+    // 能自动接着轮询，而不是留一个没有任何提示的面板。
+    try {
+      sessionStorage.setItem('f2b-upgrading', state.update.before || '');
+    } catch (e) { /* 隐私模式下写不进去就算了 */ }
     openUpOverlay(target ? t("update.installingTitle", { v: target }) : t("update.upgrading"));
     paintUpStage(t("update.installingDownload"));
     if (button) busy(button, true);

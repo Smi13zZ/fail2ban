@@ -132,7 +132,7 @@ The wizard asks five things:
 ### Option 2: command line
 
 ```bash
-appcenter-cli install-fpk /path/to/fn-fail2ban-26.11.51-all.fpk
+appcenter-cli install-fpk /path/to/fn-fail2ban-26.11.52-all.fpk
 ```
 
 > `appcenter-cli` **does not upgrade an installed app** (it just prints `is installed`),
