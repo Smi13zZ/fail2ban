@@ -1971,6 +1971,9 @@
     return settings;
   }
 
+  // 备份清单一次露 5 行，与 style.css 里 .bscroll 的 246px（36 + 5×42）对应。
+  var BACKUP_ROWS = 5;
+
   /* 维护分区：导出 / 自动备份 / 备份文件，三张卡片竖排。
      结构照维护页的通行做法：每张卡一副标题 + 说明 + 动作，
      动作放卡片里而不是塞进标题行，标题行只留右侧的单个主按钮。 */
@@ -2051,6 +2054,7 @@
       '</div></div>';
 
     // ③ 备份文件：三列（创建时间 / 大小 / 恢复·删除），表头右侧挂条数。
+    // 清单一次露 BACKUP_ROWS 行，多的在列表内滚动（与 .bscroll 的 246px 对应）。
     // 文件名只是归档命名规则，用户关心的是「什么时候备的」，所以把时间戳
     // 拆出来单独成列并按时间倒序，最新的那份永远在第一行。
     var backups = (data.backups || []).slice().sort(function (a, b) {
@@ -2080,6 +2084,10 @@
           '</div></td></tr>';
       });
       html += '</tbody></table></div></div>';
+      // 列表只露 5 行，超出时明说「可以滚」—— 否则用户以为备份就这几份
+      if (backups.length > BACKUP_ROWS) {
+        html += '<div class="hint">' + t('set.backupScrollHint', { n: backups.length }) + '</div>';
+      }
     }
     html += '</div>';
     return html;
