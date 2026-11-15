@@ -1,5 +1,5 @@
 import os
-WEB = r"D:/Workspace/DeepSeek Harness/fn-fail2ban-upgrade/src/pkg/fn-fail2ban/app/web"
+WEB = r"D:/Workspace/DSH/fn-fail2ban-upgrade/src/pkg/fn-fail2ban/app/web"
 # The sidebar mark is a 32px slot on a light rail; the app tile already carries
 # its own rounded-square background, so the logo reuses that artwork directly.
 svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">

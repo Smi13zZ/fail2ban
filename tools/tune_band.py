@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, r"D:/Workspace/DeepSeek Harness/fn-fail2ban-upgrade/tools")
+sys.path.insert(0, r"D:/Workspace/DSH/fn-fail2ban-upgrade/tools")
 import make_icons as M
 from PIL import Image, ImageDraw
 px = 512

@@ -1,6 +1,6 @@
 # pvepanel 界面实现参考
 
-源码根：`D:\Workspace\DeepSeek Harness\pve-panel\src\fn-pvepanel\app\web\`
+源码根：`D:\Workspace\DSH\pve-panel\src\fn-pvepanel\app\web\`
 文件：`index.html`（Vue in-DOM 模板）、`style.css`、`js/app.js`（图标与数据）、`js/i18n.js`（文案键）
 
 ---

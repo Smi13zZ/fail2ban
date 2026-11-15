@@ -1,7 +1,7 @@
 import os
 from PIL import Image
 
-PKG = r"D:/Workspace/DeepSeek Harness/fn-fail2ban-upgrade/src/pkg/fn-fail2ban"
+PKG = r"D:/Workspace/DSH/fn-fail2ban-upgrade/src/pkg/fn-fail2ban"
 WEB = os.path.join(PKG, "app", "web")
 IMAGES = os.path.join(PKG, "app", "ui", "images")
 

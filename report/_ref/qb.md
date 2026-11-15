@@ -4,7 +4,7 @@
 
 源码根目录（只读）：
 
-    D:\Workspace\DeepSeek Harness\qbpanel-maintenance\src\qbpanel\qbpanel\app\web\
+    D:\Workspace\DSH\qbpanel-maintenance\src\qbpanel\qbpanel\app\web\
     ├─ index.html      （1482 行，Vue 3 in-DOM 模板）
     ├─ style.css       （1044 行，全局样式与变量）
     └─ js\

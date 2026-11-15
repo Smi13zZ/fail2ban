@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, r"D:/Workspace/DeepSeek Harness/fn-fail2ban-upgrade/tools")
+sys.path.insert(0, r"D:/Workspace/DSH/fn-fail2ban-upgrade/tools")
 import make_icons as M
 from PIL import Image, ImageDraw
 px = 512
@@ -22,5 +22,5 @@ print("face_black extrema:", fb.getextrema(), "count>0:", sum(1 for v in fb.getd
 img = Image.new("RGBA",(px,px),(0,0,0,0))
 img.alpha_composite(M.paint(fb,(18,18,18)))
 img.alpha_composite(M.paint(fw,(255,255,255)))
-img.save(r"D:/Workspace/DeepSeek Harness/fn-fail2ban-upgrade/image/_dbg_face.png")
+img.save(r"D:/Workspace/DSH/fn-fail2ban-upgrade/image/_dbg_face.png")
 print("saved")

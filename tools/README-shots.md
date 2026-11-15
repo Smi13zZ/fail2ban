@@ -194,7 +194,7 @@ CDP 走 `--remote-debugging-pipe`（fd 3/4，消息以 `\0` 分隔），
    假的「发现新版本」和两个一样的版本号——看起来像界面 bug，其实是截图工具自己造的。
    现在只在遮罩阶段 `seed_script`，跑完立刻 `unseed_script` 摘掉。
    假数据里的「最新版本」也按当前版本自动 +1，避免对比区出现两个相同的号。
-8. **本机路径含空格**：项目在 `D:\Workspace\DeepSeek Harness\` 下，
+8. **本机路径含空格**：项目在 `D:\Workspace\DSH\` 下，
    PowerShell 里给脚本路径加引号；脚本内部一律用 `pathlib` 拼接，不受影响。
 
 ---

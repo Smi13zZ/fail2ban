@@ -1,5 +1,5 @@
 import sys, os
-sys.path.insert(0, r"D:/Workspace/DeepSeek Harness/fn-fail2ban-upgrade/tools")
+sys.path.insert(0, r"D:/Workspace/DSH/fn-fail2ban-upgrade/tools")
 import importlib, make_icons as M
 importlib.reload(M)
 from PIL import Image
@@ -20,4 +20,4 @@ print("layer mode:", lay.mode, "alpha extrema:", lay.getchannel("A").getextrema(
 base_im = Image.new("RGBA",(px,px),(0,0,0,0))
 base_im.alpha_composite(lay)
 print("after composite alpha extrema:", base_im.getchannel("A").getextrema())
-base_im.save(r"D:/Workspace/DeepSeek Harness/fn-fail2ban-upgrade/image/_debug_paint.png")
+base_im.save(r"D:/Workspace/DSH/fn-fail2ban-upgrade/image/_debug_paint.png")

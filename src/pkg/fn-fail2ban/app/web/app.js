@@ -1652,7 +1652,7 @@
             : ("<span class=\"badge warn\">" + t('err.loadFailed') + "</span> <span class=\"hint\">") +
               esc(item.error || '') + '</span>');
         }).join('') +
-        ("</dl><div class=\"help\">" + t('ban.perJailHelp') + "</div></div>");
+        ("</dl><div class=\"card-note\">" + t('ban.perJailHelp') + "</div></div>");
     }
     return html;
   }
@@ -2089,7 +2089,7 @@
       html += '</tbody></table></div></div>';
       // 列表只露 5 行，超出时明说「可以滚」—— 否则用户以为备份就这几份
       if (backups.length > BACKUP_ROWS) {
-        html += '<div class="hint">' + t('set.backupScrollHint', { n: backups.length }) + '</div>';
+        html += '<div class="card-note">' + t('set.backupScrollHint', { n: backups.length }) + '</div>';
       }
     }
     html += '</div>';
@@ -2847,7 +2847,8 @@
       // 只露 5 条，其余在这里滚动；高度由 fitDeliveries() 事后量出来写死
       html += '<div class="nlog">' + items.map(deliveryRowHtml).join('') + '</div>';
     }
-    html += '<div class="hint">' + esc(t('notify.delivNote')) + '</div></div>';
+    // 同上：这是整张卡片的脚注，不是最后一条记录的附注。
+    html += '<div class="card-note">' + esc(t('notify.delivNote')) + '</div></div>';
     return html;
   }
 
@@ -2993,7 +2994,9 @@
       });
       html += '</div>';
     }
-    html += '<div class="hint">' + esc(t('notify.channelsSupported')) + '</div></div>';
+    // 卡片脚注：与上面的渠道列表之间留出距离，否则说明会贴着最后一行渠道，
+    // 看起来像那一行的一部分。.hint 没有上边距（它本来是给开关行做内嵌注脚的）。
+    html += '<div class="card-note">' + esc(t('notify.channelsSupported')) + '</div></div>';
 
     // 投递记录
     html += deliveryCardHtml();
@@ -3309,8 +3312,7 @@
     if (!packages.length) {
       // 空态说清「什么时候会有包」：一键升级下载的包留在这里，
       // 从没升级过自然一个也没有 —— 不说的话看起来像功能坏了。
-      html += '<div class="faint">' + esc(t('stor.packagesEmpty')) + '</div>' +
-        (pkgDir ? '<div class="card-note">' + esc(t('stor.packagesDir', { path: pkgDir })) + '</div>' : '');
+      html += '<div class="faint">' + esc(t('stor.packagesEmpty')) + '</div>';
     } else {
       html += '<div class="bscroll storage-scroll"><div class="table-wrap">' +
         '<table class="ttable tstorage tpkg"><thead><tr>' +
@@ -3330,8 +3332,13 @@
       });
       html += '</tbody></table></div></div>';
     }
-    if (updateKeepN) {
-      html += '<div class="card-note">' + esc(t('stor.keepNote', { n: updateKeepN })) + '</div>';
+    // 目录位置与保留份数合成一句脚注。分两行会连着出现两个 12px 间距的
+    // 地块，看着像两段互不相关的补充说明；它俩讲的其实是同一个地方。
+    var pkgNotes = [];
+    if (pkgDir) pkgNotes.push(t('stor.packagesDir', { path: pkgDir }));
+    if (updateKeepN) pkgNotes.push(t('stor.keepNote', { n: updateKeepN }));
+    if (pkgNotes.length) {
+      html += '<div class="card-note">' + esc(pkgNotes.join(' ')) + '</div>';
     }
     html += '</div>';
 
@@ -3601,7 +3608,9 @@
         ? String(info.published_at).slice(0, 10) : '—')) +
       '</dl>';
 
-    html += '<div class="help">' + esc(t('update.autoCheck')) + '</div>';
+    // 卡片脚注：这句讲的是自动检查的节奏，属于整张卡的注解，
+    // 不是上面某个字段的说明 —— 与「存储 / 通知」两张卡的脚注同一档。
+    html += '<div class="card-note">' + esc(t('update.autoCheck')) + '</div>';
     html += '</div>';
     return html;
   }

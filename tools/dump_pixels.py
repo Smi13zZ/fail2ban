@@ -1,5 +1,5 @@
 from PIL import Image
-p = r"D:/Workspace/DeepSeek Harness/fn-fail2ban-upgrade/src/pkg/fn-fail2ban/app/ui/images/icon_256.png"
+p = r"D:/Workspace/DSH/fn-fail2ban-upgrade/src/pkg/fn-fail2ban/app/ui/images/icon_256.png"
 im = Image.open(p).convert("RGB")
 w, h = im.size
 # sample a grid of pixels to see what is actually in the file

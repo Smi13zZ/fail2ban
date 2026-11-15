@@ -1,5 +1,5 @@
 import os
-WEB = r"D:/Workspace/DeepSeek Harness/fn-fail2ban-upgrade/src/pkg/fn-fail2ban/app/web"
+WEB = r"D:/Workspace/DSH/fn-fail2ban-upgrade/src/pkg/fn-fail2ban/app/web"
 # Vector twin of the app icon: light tile, black shield, two white slashes.
 # The panel logo and the tab icon must be the same mark as the launcher icon.
 svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">

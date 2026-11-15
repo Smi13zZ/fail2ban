@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, r"D:/Workspace/DeepSeek Harness/fn-fail2ban-upgrade/tools")
+sys.path.insert(0, r"D:/Workspace/DSH/fn-fail2ban-upgrade/tools")
 import make_icons as M
 from PIL import Image, ImageDraw
 px = 512
@@ -33,5 +33,5 @@ face_white = Image.composite(slash, Image.new("L", (px, px), 0), face)
 strip = Image.new("L", (px * 4, px), 0)
 for i, m in enumerate([rim, face, slash, face_white]):
     strip.paste(m, (px * i, 0))
-strip.save(r"D:/Workspace/DeepSeek Harness/fn-fail2ban-upgrade/image/_debug_masks.png")
+strip.save(r"D:/Workspace/DSH/fn-fail2ban-upgrade/image/_debug_masks.png")
 print("saved")

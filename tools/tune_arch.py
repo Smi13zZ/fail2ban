@@ -1,5 +1,5 @@
 import sys, math
-sys.path.insert(0, r"D:/Workspace/DeepSeek Harness/fn-fail2ban-upgrade/tools")
+sys.path.insert(0, r"D:/Workspace/DSH/fn-fail2ban-upgrade/tools")
 from PIL import Image, ImageDraw
 px = 400
 strip = Image.new("RGB", (px*3, px), (255,255,255))
@@ -26,5 +26,5 @@ for i, amp in enumerate((0.16, 0.24, 0.32)):
     im = Image.new("RGB",(px,px),(255,255,255))
     ImageDraw.Draw(im).polygon(outer, fill=(18,18,18))
     strip.paste(im, (px*i, 0))
-strip.save(r"D:/Workspace/DeepSeek Harness/fn-fail2ban-upgrade/image/_dbg_arch2.png")
+strip.save(r"D:/Workspace/DSH/fn-fail2ban-upgrade/image/_dbg_arch2.png")
 print("saved")

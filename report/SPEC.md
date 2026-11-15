@@ -8,7 +8,7 @@
 2. 补全缺失的实用功能。
 3. **能在生产机上原地升级，不改动任何既有配置**。
 
-参考实现：`D:\\Workspace\\DeepSeek Harness\\qbpanel-maintenance\\src\\qbpanel\\qbpanel\\app\\web\\`
+参考实现：`D:\\Workspace\\DSH\\qbpanel-maintenance\\src\\qbpanel\\qbpanel\\app\\web\\`
 （`style.css` 设计令牌与组件形态、`index.html` 的 shell 结构）。
 
 ---
