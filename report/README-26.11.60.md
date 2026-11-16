@@ -7,8 +7,8 @@
 
 | 项 | 值 |
 | --- | --- |
-| 版本 | 26.11.60（上一版 26.11.59） |
-| 包 | `output/fn-fail2ban-26.11.60-all.fpk`（427,843 B） |
+| 版本 | 26.11.61（26.11.60 的功能改动 + 收尾的死代码清理，两版都走完了全流程） |
+| 包 | `output/fn-fail2ban-26.11.61-all.fpk`（427,175 B）；26.11.60 同时发布 |
 | 构建方式 | `python tools/build_fpk.py --host fnos-test`（fnpack 只在 Linux 上可用） |
 | 闸门 | `python tools/preflight.py` → 10 道全绿 |
 
@@ -119,3 +119,23 @@ progress: {"phase":"idle","attempt":0,"rollback":true,"current":"26.11.60"}
 - CHANGELOG / 本文件 / 代码注释 / commit message 均未出现「参照」「对齐」「和 xx 一致」这类表述。
 - 版本号已 bump 到 26.11.60，未原地覆盖任何旧包（`output/` 里历史包全部保留）。
 - 探针页 `_probe_up260.html` 用完已从设备 web 目录删除（复核：`grep -c _probe` = 0）。
+## 十、26.11.61 收尾补丁
+
+26.11.60 发布后，同一轮死代码审计又报出 6 条仍无引用的 CSS 规则 —— 它们和 26.11.60
+清掉的那批是同一类，只是先前的核对脚本把 `.field`/`.grow` 当成「被引用」放过了。
+本版删掉它们，并把 `.nav-item` 兼容选择器的最后一处换成实际的 `.nav button.active`。
+
+| 规则 | 为什么是死的 |
+| --- | --- |
+| `.c-filter` / `.c-logpath` | 这两列在 26.11.23 已从 Jail 表移除 |
+| `.form-grid .field.full` | 渲染出来的永远是 `class="field"`，从没加过 `full` |
+| `.toolbar .grow` | 工具栏的伸缩占位用的是 `.h3-grow`，不是 `.grow` |
+| `.nav .nav-item.on .nav-badge` | `nav-item` 兼容写法已清空，只剩这一条 |
+| `.page-title` | 页面标题只走 `.page-head h1` |
+
+**误报记录（保留不删）**：审计脚本报 `.badge.accent` 未引用，但该类的使用点在
+字典的 HTML 片段里（`ban.selectedInline` 等 7 处），而脚本的引用语料不含字典值。
+凡是「由字典词条或字符串拼接渲染出来的类名」，静态审计都会误报，需要人工复核。
+
+26.11.61 在设备上重跑了三个探针场景（retry / failbar-en / norollback），
+读回结果与 26.11.60 完全一致 —— 删 CSS 没有碰到任何在用的样式。

@@ -243,7 +243,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .nav-badge:empty { display: none; }
 
 .nav button.active .nav-badge,
-.nav .nav-item.on .nav-badge {
+.nav button.active .nav-badge {
   background: color-mix(in srgb, var(--nav-active-fg) 16%, transparent);
   color: var(--nav-active-fg);
 }
@@ -747,9 +747,7 @@ input[type="checkbox"]:focus-visible {
 table.fixed { table-layout: fixed; }
 table.fixed th, table.fixed td { overflow: hidden; text-overflow: ellipsis; }
 /* 列宽固定后，过长的 logpath 需要在格子里自己截断并显示省略号 */
-table.fixed td.mono,
-table.fixed td.c-logpath,
-table.fixed td.c-filter { text-overflow: ellipsis; }
+table.fixed td.mono { text-overflow: ellipsis; }
 
 /* 每列一个够用的最小宽度：数字列按最长的「9999999」算，状态列按最长徽章算。
    宽度只写在表头上——table-layout:fixed 只看第一行的声明，单元格沿用同一列宽。 */
@@ -758,9 +756,6 @@ table.fixed td.c-filter { text-overflow: ellipsis; }
 .c-jail { width: 240px; }
 /* 100px 是按英文表头「Current bans」量的：再窄就会把表头截成省略号 */
 .c-count { width: 100px; }
-.c-filter { width: 96px; }
-/* 概览表列少，日志文件列吃掉剩余宽度；Jail 表列多，单独给它定宽 */
-.c-logpath { width: auto; min-width: 150px; }
 .c-acts { width: 140px; }
 .c-ip { width: 180px; }
 .c-time { width: 124px; }
@@ -1066,7 +1061,6 @@ td .cell-actions .btn.danger:hover {
   flex-wrap: wrap;
   margin-bottom: var(--gap);
 }
-.toolbar .grow { flex: 1 1 160px; min-width: 0; }
 /* 工具栏里的输入框不再吃满整行：给一个接近旧版（≤320px）的定宽，
    避免在还没套 .toolbar-search 的页面上缩成 input 的默认 20 字符宽 */
 .toolbar .input, .toolbar input[type="text"], .toolbar input[type="search"] {
@@ -1839,7 +1833,7 @@ details.raw pre {
     color: var(--text);
   }
   .page-head { flex: 1 1 auto; min-width: 0; }
-  .page-head h1, .page-title {
+  .page-head h1 {
     font-size: 14px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1927,7 +1921,6 @@ details.raw pre {
   .ip-row { padding: 9px 10px; }
 
   .toolbar { gap: 8px; }
-  .toolbar .grow { flex: 1 1 100%; }
   .toolbar-search,
   .toolbar .toolbar-search,
   .toolbar input.toolbar-search,
@@ -3296,7 +3289,6 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px 14px;
 }
-.form-grid .field.full { grid-column: 1 / -1; }
 @media (max-width: 720px) {
   .form-grid { grid-template-columns: minmax(0, 1fr); }
 }

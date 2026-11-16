@@ -1,5 +1,5 @@
 appname               = fn-fail2ban
-version               = 26.11.60
+version               = 26.11.61
 display_name          = Fail2ban
 desc                  = Fail2ban 原生客户端：可视化配置 Jail、查看封禁记录、手动封禁/解封、管理全局策略与过滤器，并对接系统 fail2ban 服务，支持把封禁同步到「敲门 knock」（fn-knock）通用黑名单。
 platform              = all
@@ -13,5 +13,5 @@ desktop_applaunchname = fn-fail2ban.main
 service_port          = 18752
 checkport             = true
 ctl_stop              = true
-changelog             = 26.11.60 一键更新全链路收口：新增 attempt 编号，重试不再被上一轮的失败状态打断（原先重试后第一个轮询读到旧死信，弹窗当场关掉、下载却在后台跑）；阶段增加 checking，点下按钮到拿到版本信息之间显示「检查中…」而不是假装在下载，连点两次返回 busy；回滚包查找把安装包真正落盘的目录排在第一位并按 mtime 取最新、排除本次待装的包（原先只扫 @appshare 与 /tmp，回滚分支从未执行过），找不到时界面明说无法自动回滚；失败原因新增任意页面可见的失败条（带查看详情与单独关闭），不再只渲染在设置卡片里；失败拆成 code + detail 两样下发，中英两本字典补齐 20 个错误码，英文界面不再出现中文；进度条只在下载中且有 Content-Length 时出现，成功帧显示真实字节不再塞 100/100；存储页嵌套关系改按 realpath 实际包含关系判定，合计不再可能重复计数；清掉 42 条无引用 i18n 词条、5 个前端函数、7 个后端函数/常量、7 个 CSS 变量与 26 个无引用 CSS 类（审计带变异自检）；新增一键升级后端验收与备份恢复两道闸门，preflight 与 CI 同步扩到 10 道。
+changelog             = 26.11.61 补完 26.11.60 的死代码清理：删掉审计脚本仍报的 6 个无引用 CSS 规则（.c-filter / .c-logpath 两列在 26.11.23 已从 Jail 表移除、.form-grid .field.full 与 .toolbar .grow 的标记从未渲染过、.nav .nav-item.on .nav-badge 是兼容写法的残留、.page-head h1 后面那个 .page-title 别名同类），并把 .nav-item 兼容选择器的最后一处换成实际的 .nav button.active。审计脚本自带的「accent 未引用」是误报：.badge.accent 由字典里的 HTML 片段渲染，脚本的语料不含字典值，这类动态拼接的类名保留。无功能改动。
 checksum              = a84cecbdd688f69a27d8caceaa63e2ce

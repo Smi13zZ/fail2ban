@@ -37,6 +37,8 @@
 | 26.11.2 | 212,060 | 面板内图标换成自身资源（修豆腐块） |
 | 26.11.3 | 266,028 | i18n 中英文全量切换、主题图标按钮、删概览标题行、侧栏只留应用名 |
 | 26.11.4 | 291,407 | 新黑白盾牌九档图标、删侧栏品牌行、表格固定列宽、排序独立控件；顺带修 3 个缺陷 |
+| **26.11.61** | **—** | 收尾补完 26.11.60 的死代码清理：删 6 条无引用 CSS 规则（.c-filter/.c-logpath/.form-grid .field.full/.toolbar .grow/.nav .nav-item.on .nav-badge/.page-title 别名）；.badge.accent 是审计误报（由字典 HTML 片段渲染）保留。无功能改动 |
+| **26.11.60** | **—** | 一键更新全链路收口：attempt 编号（重试不再被上一轮死信打断）、checking 阶段、回滚包查找把包目录排第一并按 mtime 取最新、任意页面可见的失败条、code+detail 双下发 20 个错误码、进度条只在有 Content-Length 时出现、成功帧显示真实字节；修 app_version/backup 读不到 manifest（设备上 TRIM_APPDEST 指向 @appcenter 子树）与成功帧版本号取错；清死代码（42 i18n 键 / 5 前端函数 / 7 后端 / 7 CSS 变量 / 32 CSS 类）；新增 test_update_flow.py 与 test_backup_restore.py 两道闸门 |
 | **26.11.59** | **—** | 卡片脚注统一用 .card-note（上边距 12px / 12px / --faint），修通知两处脚注贴着内容；顺带修维护·备份提示、更新页底部说明、封禁页按 Jail 统计说明；存储页两条脚注合成一句 |
 | **26.11.58** | **—** | 13 处危险操作确认从浏览器原生 confirm 改为站内模态（confirmDanger 改返回 Promise）；标题/主按钮按动作命名、危险态红色、正文保留换行、Esc 只关最上层 |
 | **26.11.57** | **—** | 修「安装包缓存」恒空（扫的是 @appdata/update，包实际在 @apphome；且 @appdata→@apphome 的字面替换在软链接路径上失效，改为先 realpath）；存储页手机端不再左右划（路径列收起 + 选择器补到 .table-wrap table.ttable.tstorage 才压得住 auto）；桌面明细不再切半行（330→312px，阈值降到 700px） |
