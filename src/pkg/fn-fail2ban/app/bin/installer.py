@@ -29,6 +29,8 @@ import os
 import posixpath
 import re
 import shutil
+import socket
+import ssl
 import subprocess
 import threading
 import time
@@ -36,8 +38,19 @@ import urllib.error
 import urllib.request
 
 APP_NAME = "fn-fail2ban"
-# 对外暴露的状态机。"failed" 在下次启动前是终态。
-PHASES = ("idle", "downloading", "installing", "failed")
+# 状态机：idle → checking → downloading → installing →（进程被换掉）→ idle；
+# 任何一步失败都落到 failed，而 failed 是终态 —— 只有下一次尝试才会把它顶掉。
+# 正因为它是终态，「重试后第一个轮询读到上一轮的失败」才会发生，所以每次尝试
+# 另外发一个 attempt 编号，界面靠它区分死信与本轮的结论。
+# checking 也算进行中：点下按钮到版本信息拿到之前界面显示的是「检查中…」，
+# 这段时间里再点一次不能起第二个下载。
+PHASE_IDLE = "idle"
+PHASE_CHECKING = "checking"
+PHASE_DOWNLOADING = "downloading"
+PHASE_INSTALLING = "installing"
+PHASE_FAILED = "failed"
+#: 视为「正在进行中」的阶段。存储清理与第二次点击都按它拒绝。
+ACTIVE_PHASES = (PHASE_CHECKING, PHASE_DOWNLOADING, PHASE_INSTALLING)
 
 DOWNLOAD_LIMIT = 128 * 1024 * 1024
 CHUNK = 256 * 1024
@@ -65,6 +78,9 @@ APPCENTER_CANDIDATES = (
 INSTALL_MANIFEST = "/var/apps/%s/manifest"
 
 # 可能还留着当前运行版本安装包的位置，仅用于拼出回滚包。
+# 真正的落点是 package_dir()（@apphome 下的工作区），find_previous_fpk 会把它
+# 排在最前面再拼上这里这串 —— 只扫下面这几个共享目录的话，一键升级过的机器上
+# 永远找不到「正在跑的那个版本」，安装脚本的回滚分支一次也不会执行。
 PREV_SEARCH_DIRS = (
     "/vol1/@appshare/%s",
     "/vol1/@appshare",
@@ -80,15 +96,102 @@ _LOCK = threading.RLock()
 _STATE = {
     "phase": "idle",
     "version": "",
+    # detail 只给失败用（中文，给人看的回退文本）。成功路径上它是空串：
+    # 界面按 phase 自己拼当前语言的句子，后端塞中文会让英文界面冒出中文。
     "detail": "",
+    # code 是语言中立的失败标识（netDns / gh403 / pkgTooBig …），界面优先用它翻译。
+    "code": "",
     "done": 0,
     "total": 0,
+    # 每次尝试递增。界面靠它区分「上一轮的死信」与「本轮真的失败了」。
+    "attempt": 0,
+    # 这次升级有没有备好回滚包。None = 还没走到那一步，界面据此显示「检查中」，
+    # 而不是替它猜一个 true 然后承诺一次不会发生的回滚。
+    "rollback": None,
     "at": 0,
 }
 # var_dir 供 progress() 找 install.log；current 回显给界面。启动时配置一次。
 _CTX = {"var_dir": "", "current": ""}
 
 _LOG = None
+
+
+class UpdateError(Exception):
+    """升级失败，同时带一句中文（写日志、中文界面用）和一个语言中立码。
+
+    code 才是界面显示的判据：英文界面靠它翻译，detail 只是拿不到 code 时的
+    回退文本。写成一个异常类型而不是到处传字符串，是为了让 download() 里那些
+    分支只能通过它来报错 —— 忘了带码的失败会在英文界面上漏出中文。
+    """
+
+    def __init__(self, code, detail="", arg=""):
+        Exception.__init__(self, detail or code)
+        self.code = code
+        self.detail = detail or code
+        self.arg = arg
+
+
+#: 网络层失败 → 用户能照着做点什么的那个原因。顺序有意义：先认最具体的类型，
+#: 最后才落到通用判断（gaierror 是 OSError 的子类，反过来排就永远命中不到它）。
+def error_code(exc, seen=None):
+    """把一个异常翻译成界面能翻译的码；认不出来返回空串。
+
+    urllib 会把真实原因包在 URLError.reason 里（有时还套两层），所以这里递归
+    拆壳 —— 不拆的话「DNS 解析失败」在界面上永远显示成一句泛泛的「网络错误」。
+    """
+    if isinstance(exc, UpdateError):
+        return exc.code
+    if seen is None:
+        seen = set()
+    if id(exc) in seen:
+        return ""
+    seen.add(id(exc))
+    if isinstance(exc, urllib.error.HTTPError):
+        code = int(getattr(exc, "code", 0) or 0)
+        if code in (403, 429):
+            return "gh403"
+        if code == 404:
+            return "gh404"
+        return ""
+    if isinstance(exc, urllib.error.URLError):
+        inner = getattr(exc, "reason", None)
+        nested = error_code(inner, seen) if inner is not None else ""
+        return nested
+    if isinstance(exc, ssl.SSLError):
+        return "netTls"
+    if isinstance(exc, socket.gaierror):
+        return "netDns"
+    if isinstance(exc, (socket.timeout, TimeoutError)):
+        return "netTimeout"
+    if isinstance(exc, ConnectionRefusedError):
+        return "netRefused"
+    if isinstance(exc, (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)):
+        return "netReset"
+    if isinstance(exc, http.client.IncompleteRead):
+        return "netReset"
+    return ""
+
+
+def _describe(exc):
+    """一句中文，作为拿不到 code 时的回退文本；码齐全时仅进日志。
+
+    与 error_code 同一套判据，避免出现「码说 DNS、文字说超时」这种自相矛盾。
+    """
+    if isinstance(exc, UpdateError):
+        return exc.detail
+    code = error_code(exc)
+    hints = {
+        "gh403": "GitHub 接口限流，请稍后再试",
+        "gh404": "仓库或发布不存在",
+        "netDns": "域名解析失败，请检查设备的网络与 DNS 设置",
+        "netTimeout": "请求超时",
+        "netRefused": "连接被拒绝，对方没有应答",
+        "netReset": "连接被中断，请重试",
+        "netTls": "TLS 握手失败，请检查设备的证书与时间",
+    }
+    if code in hints:
+        return hints[code]
+    return str(exc) or exc.__class__.__name__
 
 
 def _noop(_msg):
@@ -121,30 +224,43 @@ def set_context(var_dir=None, current=None, log=None):
 
 
 def reset():
-    """回到干净的 idle 状态：给测试用，服务启动时也调一次。"""
+    """回到干净的 idle 状态：给测试用，服务启动时也调一次。
+
+    attempt 一并归零：新进程里没有「上一轮」可言，留着旧编号只会让界面把
+    第一次轮询读到的 failed 当成历史遗留而跳过。
+    """
     with _LOCK:
         _STATE.update({
-            "phase": "idle", "version": "", "detail": "",
-            "done": 0, "total": 0, "at": 0,
+            "phase": PHASE_IDLE, "version": "", "detail": "", "code": "",
+            "done": 0, "total": 0, "attempt": 0, "rollback": None, "at": 0,
         })
 
 
-def _set(phase, version="", detail="", done=None, total=None):
+def _set(phase, version="", detail="", done=None, total=None, code="",
+         rollback=None):
     """更新共享进度状态。
 
     字节计数只在调用方明确传入时覆盖：一次下载从 0/0 开始、由传输过程填满，
     后续阶段不动它们，进度条就停在下载结束时的位置，而不是在进入安装阶段时
     突然跳回空。
+
+    detail 只在失败时给（中文回退文本），code 是同一件事的语言中立标识。
+    成功路径一律传空串：阶段文案由界面按当前语言自己拼。
     """
     with _LOCK:
         _STATE["phase"] = phase
         _STATE["version"] = version
         _STATE["detail"] = detail
+        # 每进入一个非失败阶段就先清掉上一轮的 code，否则界面会把上次的错误码
+        # 当成本轮的原因显示出来。
+        _STATE["code"] = code
         _STATE["at"] = int(time.time())
         if done is not None:
             _STATE["done"] = int(done)
         if total is not None:
             _STATE["total"] = int(total)
+        if rollback is not None:
+            _STATE["rollback"] = bool(rollback)
 
 
 def _percent(done, total):
@@ -224,11 +340,6 @@ def _install_log_path(var_dir=None):
     return os.path.join(d, "install.log") if d else ""
 
 
-def _env_path(var_dir=None):
-    d = _update_dir(var_dir)
-    return os.path.join(d, "update.env") if d else ""
-
-
 def _tail(path, lines=LOG_TAIL_LINES):
     if not path or not os.path.isfile(path):
         return ""
@@ -241,11 +352,30 @@ def _tail(path, lines=LOG_TAIL_LINES):
     return "\n".join(rows[-lines:])
 
 
+#: 安装脚本落在日志里的两句结论。界面等超时之后靠它们判断「到底回滚了没有」——
+#: 脚本是本进程被杀之后才跑完的，日志是唯一还活着的通道。
+_ROLLED_BACK = "已尝试回滚"
+_NO_ROLLBACK = "没有可用的上一个安装包"
+
+
+def _outcome(tail):
+    """从日志尾部认这次升级的结局：回滚了 / 无包可回滚 / 还看不出来。"""
+    text = tail or ""
+    if _ROLLED_BACK in text:
+        return "rolledBack"
+    if _NO_ROLLBACK in text:
+        return "noRollback"
+    return ""
+
+
 def progress():
     """当前进度快照，附带安装脚本日志的尾部。
 
     日志是每次调用都从磁盘现读的，这是刻意的：有意思的那几行是本进程被杀之后
     由分离出去的脚本写的，文件是唯一还能传过来的通道。
+
+    attempt 与 rollback 一并下发：前者让界面区分「上一轮的死信」，后者让界面
+    在回滚包根本不存在时别继续承诺「失败会自动回滚」。
     """
     with _LOCK:
         out = dict(_STATE)
@@ -255,14 +385,21 @@ def progress():
         # 还没走过任何一次 install() 时没有上下文，退到已安装目录的 manifest：
         # 升级完成后浏览器要靠「界面上的版本变了」判断收尾，这个值不能是空的。
         out["current"] = read_installed_version()
-    out["log"] = _tail(_install_log_path())
+    tail = _tail(_install_log_path())
+    out["log"] = tail
+    out["outcome"] = _outcome(tail)
+    if out.get("rollback") is None:
+        # 还没走到准备回滚包那一步：按「当前版本有没有安装包副本」现算一次。
+        # 不能拿 rollback.fpk 存不存在来判断 —— 那是上一轮留下的临时文件，
+        # 与「这个版本能不能回滚」没有必然关系。
+        out["rollback"] = rollback_available(out.get("current"))
     return out
 
 
 def busy():
-    """下载或安装进行中。存储清理据此整体拒绝。"""
+    """检查 / 下载 / 安装中。存储清理与第二次点击都据此拒绝。"""
     with _LOCK:
-        return str(_STATE.get("phase") or "") in ("downloading", "installing")
+        return str(_STATE.get("phase") or "") in ACTIVE_PHASES
 
 
 # ---------------------------------------------------------------------------
@@ -317,20 +454,23 @@ def download(url, dest, limit=DOWNLOAD_LIMIT, on_progress=None, timeout=HTTP_TIM
     校验器正要打开的那个路径上，否则掉线的下载看起来和正常的下载一模一样。
     """
     if not str(url or "").strip():
-        raise ValueError("下载地址为空")
+        raise UpdateError("noAsset", "下载地址为空")
     folder = os.path.dirname(os.path.abspath(dest))
     if folder:
-        os.makedirs(folder, exist_ok=True)
+        try:
+            os.makedirs(folder, exist_ok=True)
+        except OSError as exc:
+            raise UpdateError("noDir", "无法创建下载目录：%s" % exc)
     part = dest + ".part"
     req = urllib.request.Request(url, headers={"User-Agent": APP_NAME})
     total = 0
     expect = 0
     try:
         resp = urllib.request.urlopen(req, timeout=timeout)
-    except urllib.error.HTTPError as exc:
-        raise ValueError("下载失败：HTTP %d" % int(getattr(exc, "code", 0) or 0))
     except Exception as exc:
-        raise ValueError("下载失败：%s" % (exc,))
+        # 打开失败（DNS / 超时 / TLS / 403 / 404）都由 error_code 归一个码出来，
+        # 认不出来的才落到空码 + 原文。
+        raise UpdateError(error_code(exc), "下载失败：%s" % _describe(exc))
     try:
         with resp:
             try:
@@ -346,14 +486,14 @@ def download(url, dest, limit=DOWNLOAD_LIMIT, on_progress=None, timeout=HTTP_TIM
                         break
                     total += len(chunk)
                     if total > limit:
-                        raise ValueError("安装包超过 %d MB，已中止"
-                                         % (limit // 1024 // 1024))
+                        raise UpdateError("pkgTooBig", "安装包超过 %d MB，已中止"
+                                          % (limit // 1024 // 1024))
                     handle.write(chunk)
                     if on_progress:
                         on_progress(total, expect)
                 handle.flush()
                 os.fsync(handle.fileno())
-    except ValueError:
+    except UpdateError:
         try:
             os.unlink(part)
         except OSError:
@@ -366,19 +506,19 @@ def download(url, dest, limit=DOWNLOAD_LIMIT, on_progress=None, timeout=HTTP_TIM
             os.unlink(part)
         except OSError:
             pass
-        raise ValueError("下载不完整：只收到 %d 字节（连接中断）" % total)
+        raise UpdateError("netReset", "下载不完整：只收到 %d 字节（连接中断）" % total)
     except Exception as exc:
         try:
             os.unlink(part)
         except OSError:
             pass
-        raise ValueError("下载中断：%s" % (exc,))
+        raise UpdateError(error_code(exc), "下载中断：%s" % _describe(exc))
     if total <= 0:
         try:
             os.unlink(part)
         except OSError:
             pass
-        raise ValueError("下载内容为空")
+        raise UpdateError("pkgUnreadable", "下载内容为空")
     # 分块 read() 以返回空字节串表示 EOF，不会抛异常 —— 所以一个承诺了
     # Content-Length 又提前挂断的服务器，看起来就和完整下载一样。比对字节数是
     # 唯一能抓到它的办法，而被截断的包绝不能走到校验之后的卸载那一步。
@@ -387,8 +527,16 @@ def download(url, dest, limit=DOWNLOAD_LIMIT, on_progress=None, timeout=HTTP_TIM
             os.unlink(part)
         except OSError:
             pass
-        raise ValueError("下载不完整：收到 %d 字节，应为 %d 字节" % (total, expect))
-    os.replace(part, dest)
+        raise UpdateError("netReset", "下载不完整：收到 %d 字节，应为 %d 字节"
+                          % (total, expect))
+    try:
+        os.replace(part, dest)
+    except OSError as exc:
+        try:
+            os.unlink(part)
+        except OSError:
+            pass
+        raise UpdateError("noDir", "无法保存安装包：%s" % exc)
     return total
 
 
@@ -423,8 +571,8 @@ def _manifest_fields(raw):
 def validate_fpk(path, app_name=APP_NAME, appcenter=None, expect_version=None):
     """除非这个包确实是我们自己的新版本，否则不许卸载任何东西。
 
-    抛 ValueError，消息可直接给界面看。在脚本被写出来之前就调用 —— 脚本里的
-    那次卸载从面板的角度看是不可逆的。
+    抛 UpdateError（码 + 中文），码给界面翻译、中文给中文界面与日志。在脚本被
+    写出来之前就调用 —— 脚本里的那次卸载从面板的角度看是不可逆的。
 
     appcenter：显式指定 appcenter-cli 路径；None 表示按常规位置搜索。
     测试可以传一个替身，从而在设备之外把这条检查跑通。
@@ -432,9 +580,13 @@ def validate_fpk(path, app_name=APP_NAME, appcenter=None, expect_version=None):
     import tarfile
 
     if not path or not os.path.isfile(path):
-        raise ValueError("安装包不存在")
-    if os.path.getsize(path) == 0:
-        raise ValueError("安装包是空文件")
+        raise UpdateError("pkgMissing", "安装包不存在")
+    try:
+        empty = os.path.getsize(path) == 0
+    except OSError as exc:
+        raise UpdateError("pkgMissing", "安装包读不到：%s" % exc)
+    if empty:
+        raise UpdateError("pkgMissing", "安装包是空文件")
     try:
         # r:* 而不是 r:gz：包的外层是未压缩的 tar，只有内层 app.tgz 才 gzip。
         # 写死 r:gz 时，一个完全正常的 .fpk 会被判成「不是 gzip 文件」。
@@ -442,31 +594,33 @@ def validate_fpk(path, app_name=APP_NAME, appcenter=None, expect_version=None):
             names = tf.getnames()
             # fnpack 总会写这两个；缺任何一个，说明要么不是这种包，要么包是坏的。
             if "manifest" not in names:
-                raise ValueError("安装包缺少 manifest")
+                raise UpdateError("pkgStructure", "安装包缺少 manifest")
             if "app.tgz" not in names:
-                raise ValueError("安装包缺少 app.tgz")
+                raise UpdateError("pkgStructure", "安装包缺少 app.tgz")
             raw = tf.extractfile("manifest").read().decode("utf-8", "replace")
-    except ValueError:
+    except UpdateError:
         raise
     except Exception as exc:
-        raise ValueError("安装包无法解压：%s" % (exc,))
+        raise UpdateError("pkgUnreadable", "安装包无法解压：%s" % (exc,))
 
     fields = _manifest_fields(raw)
     found = fields.get("appname") or ""
     if found != app_name:
-        raise ValueError("安装包应用名不匹配：%s" % (found or "?"))
+        raise UpdateError("pkgAppName", "安装包应用名不匹配：%s" % (found or "?"),
+                          arg=found or "?")
 
     have = (fields.get("version") or "").strip().lstrip("vV")
     if not have:
-        raise ValueError("安装包 manifest 里没有版本号")
+        raise UpdateError("pkgStructure", "安装包 manifest 里没有版本号")
     if expect_version is not None:
         want = str(expect_version or "").strip().lstrip("vV")
         if want and have != want:
-            raise ValueError("安装包版本不匹配：期望 %s，实际 %s" % (want, have))
+            raise UpdateError("pkgVersion", "安装包版本不匹配：期望 %s，实际 %s"
+                              % (want, have), arg=have)
 
     cli = _find_appcenter(appcenter or "")
     if not cli:
-        raise ValueError("找不到 appcenter-cli，无法自动安装")
+        raise UpdateError("noCli", "找不到 appcenter-cli，无法自动安装")
     return {"version": have, "appcenter": cli}
 
 
@@ -474,32 +628,56 @@ def validate_fpk(path, app_name=APP_NAME, appcenter=None, expect_version=None):
 # 回滚包
 # ---------------------------------------------------------------------------
 
-def find_previous_fpk(current, app_name=APP_NAME, extra_dirs=(), exclude=()):
+def find_previous_fpk(current, app_name=APP_NAME, extra_dirs=(), exclude=(),
+                      var_dir=None):
     """找出与当前运行版本对应的安装包，供回滚使用。
 
+    包实际落盘的位置（package_dir()）排在**第一位**：一键升级把每个包都下到
+    那里，所以升级过一次之后，「当前正在跑的版本」的包就躺在里面。原先只扫
+    /vol1/@appshare 与 /tmp，那条路在这台设备上从来没有过文件，回滚等于没有。
+
+    同一目录里可能留着同名前缀的多份（版本号带后缀、重复下载），取**最新的
+    一份**（mtime）。exclude 用来排掉本次刚下载的那个 —— 它就是待安装的新包，
+    拿它当回滚包等于把失败现场重装一遍。
+
     找不到是正常情况（全新安装的机器上就没有更早的包），返回空串而不是报错：
-    升级照常进行，只是没有回滚可用。
+    升级照常进行，只是没有回滚可用，界面据 rollback 字段诚实说明。
     """
-    want = str(current or "").strip()
+    want = str(current or "").strip().lstrip("vV")
     if not want:
         return ""
     prefix = "%s-%s" % (app_name, want)
     skip = set()
     for path in exclude:
         try:
-            skip.add(os.path.abspath(path))
+            skip.add(os.path.realpath(path))
         except OSError:
             continue
-    dirs = list(extra_dirs)
+    dirs = []
+    try:
+        work = package_dir(var_dir)
+    except Exception:
+        work = ""
+    if work:
+        dirs.append(work)
+    dirs.extend(extra_dirs)
     for pattern in PREV_SEARCH_DIRS:
         dirs.append(pattern % app_name if "%s" in pattern else pattern)
+    best = ""
+    best_at = -1.0
     seen = set()
     for folder in dirs:
-        if not folder or folder in seen:
+        if not folder:
             continue
-        seen.add(folder)
         try:
-            entries = sorted(os.listdir(folder))
+            key = os.path.realpath(folder)
+        except OSError:
+            key = folder
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            entries = os.listdir(folder)
         except OSError:
             continue
         for name in entries:
@@ -507,12 +685,31 @@ def find_previous_fpk(current, app_name=APP_NAME, extra_dirs=(), exclude=()):
                 continue
             full = os.path.join(folder, name)
             try:
-                if not os.path.isfile(full) or os.path.abspath(full) in skip:
+                if not os.path.isfile(full):
                     continue
+                if os.path.realpath(full) in skip:
+                    continue
+                stamp = os.path.getmtime(full)
             except OSError:
                 continue
-            return full
-    return ""
+            if stamp > best_at:
+                best, best_at = full, stamp
+    return best
+
+
+def rollback_available(current, var_dir=None):
+    """当前运行版本有没有可以拿来回滚的安装包副本。
+
+    界面需要这个答案才能诚实说话：有包才能承诺「装挂了会自动回滚」，没有包
+    就得让用户知道要去应用中心手动处理。空 current 时返回 None（无从判断），
+    与「确定没有」是两件事，不能混成一个 False。
+    """
+    if not str(current or "").strip():
+        return None
+    try:
+        return bool(find_previous_fpk(current, var_dir=var_dir))
+    except Exception:
+        return None
 
 
 def read_installed_version(app_name=APP_NAME, manifest=None):
@@ -827,68 +1024,133 @@ def _spawn_detached(script, workdir):
     )
 
 
+#: 失败码 → 中文回退文本。界面优先按码翻译，这里这份是给中文界面、日志
+#: 和「认不出码」的旧前端用的。只覆盖本模块自己会产生的失败，网络层的由
+#: _describe() 现场生成。
+FAIL_TEXT = {
+    "busy": "更新已在进行中",
+    "noAsset": "该版本没有附带安装包",
+    "noDir": "无法创建下载目录，请检查设备存储空间",
+    "noScript": "无法启动安装脚本",
+    "noCli": "找不到 appcenter-cli，无法自动安装",
+    "pkgTooBig": "安装包超过大小上限，已中止",
+    "pkgUnreadable": "安装包无法解压，可能下载不完整",
+    "pkgStructure": "安装包结构不完整",
+    "pkgAppName": "安装包应用名不匹配",
+    "pkgVersion": "安装包版本不匹配",
+    "pkgMissing": "安装包不存在",
+}
+
+
+def _fail_text(code, detail=""):
+    return detail or FAIL_TEXT.get(code or "", "") or "升级失败"
+
+
+def begin_attempt():
+    """开一次新尝试，返回这一次的编号；已经有升级在跑时返回 0。
+
+    编号是「这条失败状态属于哪一轮」的唯一凭据。服务端的状态机不会自己回到
+    idle，所以重试后的第一次轮询读到的往往还是上一轮的 failed；界面拿新编号
+    一比就知道那条死信不属于本轮，继续等而不会当场放弃。
+
+    阶段一进来就置为 checking，而不是等下载开始：点下按钮到版本信息拿到之前
+    界面该显示「检查中…」，这段时间里再点一次也必须被 busy 挡掉 —— 否则连点
+    两次会起两个下载。
+    """
+    with _LOCK:
+        if str(_STATE.get("phase") or "") in ACTIVE_PHASES:
+            return 0
+        _STATE["attempt"] = int(_STATE.get("attempt") or 0) + 1
+        _STATE.update({
+            "phase": PHASE_CHECKING, "version": "", "detail": "", "code": "",
+            "done": 0, "total": 0, "rollback": None, "at": int(time.time()),
+        })
+        return _STATE["attempt"]
+
+
+def fail_attempt(code="", detail="", version=""):
+    """把这次尝试标成失败，并保留编号（界面靠编号确认这是本轮的结论）。"""
+    _set(PHASE_FAILED, version, _fail_text(code, detail), code=code)
+    return {"ok": False, "code": code, "error": _fail_text(code, detail),
+            "attempt": _STATE.get("attempt") or 0}
+
+
+def attempt():
+    """当前尝试编号。没有过一次尝试时为 0。"""
+    with _LOCK:
+        return int(_STATE.get("attempt") or 0)
+
+
 def install(version, url, var_dir, current, *, appcenter="", prev_fpk="",
             settings=None, spawn=None, timeout=HTTP_TIMEOUT, limit=DOWNLOAD_LIMIT,
-            log=None):
+            log=None, attempt_no=0):
     """下载、校验并交接给分离出去的安装脚本。
 
     立刻返回：真正的活在后台线程里做，浏览器于是能在下载过程中读到真实百分比。
     下载与校验阶段的任何失败都写进 progress()，并且不改动任何已装的东西。
 
-    返回 {"ok": True, "phase": "downloading", ...} 表示已经开工；
-    {"ok": False, "error": ...} 表示还没碰就失败了。
+    attempt_no 由调用方从 begin_attempt() 拿（它已经把阶段置成 checking）。
+    传 0 表示调用方没走那一步，这里补开一次，返回值里带上编号。
+
+    返回 {"ok": True, "phase": "downloading", "attempt": n, ...} 表示已经开工；
+    {"ok": False, "code": ..., "error": ...} 表示还没碰就失败了。
     """
     global _LOG
     if log is not None:
         _LOG = log if callable(log) else None
-    if busy():
-        return {"ok": False, "error": "升级已在进行中",
-                "phase": _STATE.get("phase")}
+    if not attempt_no:
+        attempt_no = begin_attempt()
+    if not attempt_no:
+        return {"ok": False, "code": "busy", "error": FAIL_TEXT["busy"],
+                "phase": _STATE.get("phase"), "attempt": attempt()}
 
     target = str(version or "").strip().lstrip("vV")
     if not target:
-        return {"ok": False, "error": "版本信息里没有版本号"}
+        return fail_attempt("checkFailed", "版本信息里没有版本号")
     if not str(url or "").strip():
-        return {"ok": False, "error": "没有可下载的安装包地址"}
+        return fail_attempt("noAsset", "没有可下载的安装包地址")
 
     updir = _update_dir(var_dir)
     if not updir:
-        return {"ok": False, "error": "无法确定更新目录"}
+        return fail_attempt("noDir", "无法确定更新目录")
     try:
         os.makedirs(updir, exist_ok=True)
     except OSError as exc:
-        return {"ok": False, "error": "无法创建更新目录：%s" % exc}
+        return fail_attempt("noDir", "无法创建更新目录：%s" % exc)
 
     # 升级用的文件放到卸载不会清的位置（见 _work_dir 的说明）。
     workdir = _work_dir(var_dir) or updir
     try:
         os.makedirs(workdir, exist_ok=True)
     except OSError as exc:
-        return {"ok": False, "error": "无法创建升级工作目录：%s" % exc}
+        return fail_attempt("noDir", "无法创建升级工作目录：%s" % exc)
 
     cli = _find_appcenter(appcenter or "")
     if not cli:
-        return {"ok": False, "error": "找不到 appcenter-cli，无法自动安装"}
+        return fail_attempt("noCli", "找不到 appcenter-cli，无法自动安装")
 
     set_context(var_dir=var_dir, current=current)
 
     base = os.path.basename(str(url).split("?")[0])
     name = _safe_name(base) if base else "%s-%s.fpk" % (APP_NAME, target)
 
-    _set("downloading", target, "准备下载 %s" % name, done=0, total=0)
+    # detail 留空：阶段文案由界面按当前语言拼，后端塞中文会让英文界面冒出中文。
+    _set(PHASE_DOWNLOADING, target, "", done=0, total=0)
     _emit("update: 开始下载 %s（%s）" % (name, target))
 
     def worker():
         try:
-            _run_install(target, url, os.path.join(workdir, name), workdir, updir, cli,
-                         current, prev_fpk, settings, spawn, timeout, limit)
+            _run_install(target, url, os.path.join(workdir, name), workdir, updir,
+                         cli, current, prev_fpk, settings, spawn, timeout, limit)
         except Exception as exc:  # noqa: BLE001 - 后台线程必须自己收尾
-            _set("failed", target, "升级失败：%s" % exc)
+            code = error_code(exc)
+            _set(PHASE_FAILED, target, _fail_text(code, _describe(exc)), code=code)
             _emit("update: 升级失败：%r" % (exc,))
 
     threading.Thread(target=worker, name="f2b-updater", daemon=True).start()
     return {"ok": True, "phase": "downloading", "version": target,
-            "file": name, "script": "", "rollback": False}
+            "file": name, "script": "", "rollback": False,
+            "attempt": attempt_no}
 
 
 def _run_install(target, url, dest, updir, logdir, cli, current, prev_fpk, settings,
@@ -903,8 +1165,13 @@ def _run_install(target, url, dest, updir, logdir, cli, current, prev_fpk, setti
     env_path = os.path.join(updir, "update.env")
 
     def on_progress(done, total):
-        _set("downloading", target, "正在下载 %s" % os.path.basename(dest),
-             done=done, total=total)
+        # 只更新字节数，detail 保持空：下载阶段的文案归界面管。
+        _set(PHASE_DOWNLOADING, target, "", done=done, total=total)
+
+    def failed(code, detail):
+        _set(PHASE_FAILED, target, _fail_text(code, detail), code=code)
+        _emit("update: 准备阶段失败（%s）：%s" % (code or "-", detail))
+        return {"ok": False, "code": code, "error": _fail_text(code, detail)}
 
     try:
         download(url, dest, limit=limit, on_progress=on_progress, timeout=timeout)
@@ -913,22 +1180,30 @@ def _run_install(target, url, dest, updir, logdir, cli, current, prev_fpk, setti
         # 这样一份过期的资产不会被装上去。
         info = validate_fpk(dest, appcenter=cli, expect_version=target)
     except Exception as exc:
-        _set("failed", target, str(exc))
-        _emit("update: 准备阶段失败：%s" % (exc,))
-        return {"ok": False, "error": str(exc)}
+        return failed(error_code(exc), _describe(exc))
 
     prev = ""
     try:
-        source = prev_fpk or find_previous_fpk(current, exclude=[dest])
+        source = prev_fpk or find_previous_fpk(
+            current, exclude=[dest], var_dir=updir)
         if source:
             prev = os.path.join(updir, "rollback.fpk")
-            if os.path.abspath(source) != os.path.abspath(prev):
+            if os.path.realpath(source) != os.path.realpath(prev):
                 shutil.copyfile(source, prev)
             _emit("update: 回滚包已备好，来自 %s" % source)
+        else:
+            # 找不到就说清楚。安装脚本里那条「没有可用的上一个安装包」分支
+            # 只有在真有 rollback.fpk 时才可能跑，界面上不能继续承诺「会自动回滚」。
+            _emit("update: 没有找到当前版本 %s 的安装包副本，本次不可回滚"
+                  % (current or "?"))
     except Exception as exc:
         # 少了回滚是安全网变薄，但不能挡住升级：新包已经验过。
         _emit("update: 跳过回滚包准备：%r" % (exc,))
         prev = ""
+    # 这一条要尽早告诉界面：回滚包有没有备好，决定了失败时该说「已回滚」还是
+    # 「无法自动回滚，请到应用中心处理」。
+    _set(_STATE.get("phase") or PHASE_DOWNLOADING, target, "",
+         rollback=bool(prev))
 
     script = os.path.join(updir, "install.sh")
     try:
@@ -940,19 +1215,15 @@ def _run_install(target, url, dest, updir, logdir, cli, current, prev_fpk, setti
             handle.write(text)
         os.chmod(script, 0o755)
     except Exception as exc:
-        _set("failed", target, "无法写入安装脚本：%s" % exc)
-        _emit("update: 无法写入安装脚本：%r" % (exc,))
-        return {"ok": False, "error": "无法写入安装脚本：%s" % exc}
+        return failed("noScript", "无法写入安装脚本：%s" % exc)
 
     try:
         runner = spawn or _spawn_detached
         runner(script, updir)
     except Exception as exc:
-        _set("failed", target, "无法启动安装脚本：%s" % exc)
-        _emit("update: 无法启动安装脚本：%r" % (exc,))
-        return {"ok": False, "error": "无法启动安装脚本：%s" % exc}
+        return failed("noScript", "无法启动安装脚本：%s" % exc)
 
-    _set("installing", target, "安装包已就绪，正在重启服务")
+    _set(PHASE_INSTALLING, target, "")
     _emit("update: 安装脚本已启动，目标版本 %s" % target)
     return {"ok": True, "version": target, "file": os.path.basename(dest),
             "script": script, "rollback": bool(prev)}

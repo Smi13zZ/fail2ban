@@ -333,9 +333,6 @@ def delete_section(name: str) -> None:
     write_managed(sections)
 
 
-def set_enabled(name: str, enabled: bool) -> None:
-    update_section(name, {"enabled": "true" if enabled else "false"})
-
 
 # ---------------------------------------------------------------------------
 # 过滤器

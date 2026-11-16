@@ -43,7 +43,6 @@ BACKUP_KEEP_MAX = 200
 #: 配置文件快照（jailconf 每次写托管配置前留的 .bak）保留份数。
 #: 每份只有几百字节，保留得比归档备份多一些，回滚时手工翻找才有意义。
 SNAPSHOT_KEEP = 20
-SNAPSHOT_KEEP_MIN = 5
 
 #: 这些后缀代表「没传完」。续传本来就是从头来，留着纯属浪费。
 PARTIAL_SUFFIXES = (".part", ".tmp")
@@ -298,9 +297,11 @@ LAYOUT = (
     ("backup_dir", "配置快照", ("backup",), "dir", False),
     ("server_log", "运行日志", ("server.log",), "file", False),
     ("server_log1", "运行日志（上一份）", ("server.log.1",), "file", False),
-    # install.log 在 @appdata/update 里，而「更新缓存」那一行现在指的是
-    # @apphome 下的安装包目录 —— 两者已经不是同一棵树，不能再标 nested
-    # （标了会被算成「已计入上级目录」，实际它一分钱都没算进合计）。
+    # install.log 在 @appdata/update 里，而「更新缓存」那一行指的是 @apphome 下的
+    # 安装包目录 —— 两者不是同一棵树，所以这里写 False。但这条关系会随部署变：
+    # 拿不到 installer 时「更新缓存」退回 @appdata/update，那时 install.log 就在
+    # 它内部，再标 False 会让合计把它算两遍。_layout_paths() 会按真实包含关系
+    # 重新判定一次，这里只是默认值。
     ("install_log", "升级安装日志", ("update", "install.log"), "file", False),
     ("deliveries", "通知投递记录", ("deliveries.json",), "file", False),
     ("events", "通知事件记录", ("events.json",), "file", False),
@@ -354,6 +355,11 @@ def _layout_paths(var_dir):
     「更新缓存」这一行必须指向安装包真正落盘的位置：它在 @apphome 下，
     不在 @appdata 里。按字面量拼 var_dir/update 会得到一个恒为 0 的行，
     合计占用也就永远漏掉安装包那几 MB。
+
+    嵌套关系按**真实包含关系**重新判定，不信 LAYOUT 里的默认值：一行如果落在
+    另一个 dir 行内部，它的字节已经算进那一行，再累加一次「合计」就虚高。
+    这个关系随部署变（installer 能不能导入，就决定了「更新缓存」指 @apphome
+    还是 @appdata/update），写死一个 False 会在另一种部署下变成重复计数。
     """
     rows = []
     for key, label, parts, kind, nested in LAYOUT:
@@ -362,8 +368,18 @@ def _layout_paths(var_dir):
             path = dirs[0] if dirs else (os.path.join(var_dir, "update") if var_dir else "")
         else:
             path = os.path.join(var_dir, *parts) if var_dir else ""
-        rows.append((key, label, path, kind, nested))
-    return rows
+        rows.append([key, label, path, kind, nested])
+    dir_roots = [(row[0], row[2]) for row in rows if row[3] == "dir" and row[2]]
+    for row in rows:
+        if row[3] != "file" or not row[2]:
+            continue
+        for dir_key, dir_path in dir_roots:
+            if dir_key == row[0]:
+                continue
+            if _within(row[2], dir_path):
+                row[4] = True
+                break
+    return [tuple(row) for row in rows]
 
 
 def report(var_dir, current_version="", backups=None, keep=None):

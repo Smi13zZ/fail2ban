@@ -260,14 +260,27 @@ def create_backup(reason: str = "manual") -> dict:
 
 
 def _app_version() -> str:
-    manifest = os.path.join(os.path.dirname(store.APP_DIR.rstrip("/")), "manifest")
-    try:
-        with open(manifest, "r", encoding="utf-8", errors="replace") as handle:
-            for line in handle:
-                if line.startswith("version"):
-                    return line.partition("=")[2].strip()
-    except OSError:
-        pass
+    """备份归档里记的「当时是哪个版本」。
+
+    设备上 TRIM_APPDEST 指向 /vol1/@appcenter/<app>，外层 manifest 不在它里面 ——
+    只按 APP_DIR 的上一级找，这条永远读不到文件，归档里的版本号会一直是
+    "unknown"。先试 fnOS 的登记点 /var/apps/<app>/manifest。
+    """
+    candidates = [
+        "/var/apps/%s/manifest" % APP_FOLDER_NAME,
+        os.path.join(os.path.dirname(store.APP_DIR.rstrip("/")), "manifest"),
+        os.path.join(store.APP_DIR, "manifest"),
+    ]
+    for manifest in candidates:
+        try:
+            with open(manifest, "r", encoding="utf-8", errors="replace") as handle:
+                for line in handle:
+                    if line.startswith("version"):
+                        value = line.partition("=")[2].strip().strip('"')
+                        if value:
+                            return value
+        except OSError:
+            continue
     return "unknown"
 
 

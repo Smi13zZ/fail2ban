@@ -335,10 +335,3 @@ def collect(force: bool = False) -> dict[str, dict[str, dict]]:
     except Exception:  # noqa: BLE001 - 解析失败不能影响面板其它功能
         return {}
 
-
-def reset_cache() -> None:
-    """清空全部缓存（自检 / 测试用）。"""
-    with _LOCK:
-        _FILES.clear()
-        _MERGED["key"] = None
-        _MERGED["value"] = {}

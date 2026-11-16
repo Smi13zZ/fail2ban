@@ -77,6 +77,8 @@ jobs:
           python3 tools/check_i18n.py
           python3 tools/check_css.py
           python3 tools/check_web.py
+          python3 tools/test_update_flow.py
+          python3 tools/test_backup_restore.py
 
       - name: 安装 fnpack
         run: |

@@ -140,12 +140,18 @@ def is_newer(latest, current):
 # ---------------------------------------------------------------------------
 
 class CheckError(Exception):
-    """某一层失败了。reason 给机器看，message 给人看。"""
+    """某一层失败了。reason 是本模块的降级判据，code 是界面翻译用的标识。
 
-    def __init__(self, reason, message):
+    两者不是一回事：reason 用来决定「要不要再试下一层」（rate_limited 该降级，
+    parse 也该降级），而 code 要跨模块统一 —— 界面拿它查同一张错误码表，
+    不管是版本检查失败还是一键升级失败，同一句英文文案。
+    """
+
+    def __init__(self, reason, message, code=""):
         Exception.__init__(self, message)
         self.reason = reason
         self.message = message
+        self.code = code
 
 
 # 越靠前越优先：两层对「为什么失败」意见不一致时，可操作性更强的那个胜出。
@@ -167,35 +173,77 @@ _FAIL_HINT = {
 }
 
 
-def _pick_reason(pairs):
+def _pick(pairs):
+    """按可操作性挑一条失败：返回 (reason, message, code)。
+
+    界面要的是「一个码 + 一句能读懂的话」，日志要的是全部细节，所以两者分开取：
+    码跟着胜出的那条走，文字则把各层的话都拼上。
+    """
+    best = None
     for reason in _REASON_ORDER:
-        for candidate, _msg in pairs:
-            if candidate == reason:
-                return reason
-    return pairs[0][0] if pairs else "error"
+        for entry in pairs:
+            if entry[0] == reason:
+                best = entry
+                break
+        if best is not None:
+            break
+    if best is None:
+        best = pairs[0] if pairs else ("error", "", "")
+    return best
 
 
 def _messages(pairs):
     seen = []
-    for _candidate, msg in pairs:
+    for entry in pairs:
+        msg = entry[1]
         if msg and msg not in seen:
             seen.append(msg)
     return "；".join(seen)
 
 
+def net_code(exc):
+    """把网络异常归到一个语言中立的码；认不出来返回空串。
+
+    urllib 会把真实原因包在 URLError.reason 里（有时套两层），所以递归拆壳：
+    不拆的话，DNS 解析失败只能在界面上显示成一句泛泛的「网络不可达」。
+    """
+    if isinstance(exc, urllib.error.URLError):
+        inner = getattr(exc, "reason", None)
+        if inner is not None and inner is not exc:
+            return net_code(inner)
+        return ""
+    if isinstance(exc, ssl.SSLError):
+        return "netTls"
+    if isinstance(exc, socket.gaierror):
+        return "netDns"
+    if isinstance(exc, (socket.timeout, TimeoutError)):
+        return "netTimeout"
+    if isinstance(exc, ConnectionRefusedError):
+        return "netRefused"
+    if isinstance(exc, (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)):
+        return "netReset"
+    if isinstance(exc, http.client.HTTPException):
+        return "netReset"
+    return ""
+
+
 def _describe(exc):
+    """-> (reason, message, code)。reason 决定降级，code 决定界面文案。"""
     if isinstance(exc, CheckError):
-        return exc.reason, exc.message
+        return exc.reason, exc.message, exc.code
     if isinstance(exc, urllib.error.HTTPError):
         code = int(getattr(exc, "code", 0) or 0)
         if code in (403, 429):
-            return "rate_limited", "HTTP %d（GitHub 接口限流）" % code
+            return "rate_limited", "HTTP %d（GitHub 接口限流）" % code, "gh403"
         if code == 404:
-            return "not_found", "HTTP 404（仓库或发布不存在）"
-        return "http", "HTTP %d" % code
+            return "not_found", "HTTP 404（仓库或发布不存在）", "gh404"
+        return "http", "HTTP %d" % code, ""
     if isinstance(exc, (socket.timeout, TimeoutError)):
-        return "timeout", "请求超时"
-    return "error", str(exc) or exc.__class__.__name__
+        return "timeout", "请求超时", "netTimeout"
+    detail = net_code(exc)
+    if detail:
+        return "network", "网络错误：%s" % (exc,), detail
+    return "error", str(exc) or exc.__class__.__name__, ""
 
 
 # ---------------------------------------------------------------------------
@@ -226,28 +274,30 @@ def _http_get(url, timeout, accept=None):
     except urllib.error.HTTPError as exc:
         code = int(getattr(exc, "code", 0) or 0)
         if code in (403, 429):
-            raise CheckError("rate_limited", "HTTP %d（GitHub 接口限流）" % code)
+            raise CheckError("rate_limited", "HTTP %d（GitHub 接口限流）" % code,
+                             "gh403")
         if code == 404:
-            raise CheckError("not_found", "HTTP 404（仓库或发布不存在）")
+            raise CheckError("not_found", "HTTP 404（仓库或发布不存在）", "gh404")
         raise CheckError("http", "HTTP %d" % code)
     except (socket.timeout, TimeoutError):
-        raise CheckError("timeout", "请求超时")
+        raise CheckError("timeout", "请求超时", "netTimeout")
     except urllib.error.URLError as exc:
         detail = getattr(exc, "reason", None) or exc
+        code = net_code(exc) or ""
         if isinstance(detail, (socket.timeout, TimeoutError)):
-            raise CheckError("timeout", "请求超时")
-        raise CheckError("network", "网络不可达：%s" % (detail,))
+            raise CheckError("timeout", "请求超时", "netTimeout")
+        raise CheckError("network", "网络不可达：%s" % (detail,), code)
     except ssl.SSLError as exc:
-        raise CheckError("network", "TLS 握手失败：%s" % (exc,))
+        raise CheckError("network", "TLS 握手失败：%s" % (exc,), "netTls")
     except (http.client.HTTPException, OSError) as exc:
-        raise CheckError("network", "网络错误：%s" % (exc,))
+        raise CheckError("network", "网络错误：%s" % (exc,), net_code(exc))
     try:
         with resp:
             body = resp.read()
     except (socket.timeout, TimeoutError):
-        raise CheckError("timeout", "读取响应超时")
+        raise CheckError("timeout", "读取响应超时", "netTimeout")
     except (http.client.HTTPException, OSError) as exc:
-        raise CheckError("network", "读取响应失败：%s" % (exc,))
+        raise CheckError("network", "读取响应失败：%s" % (exc,), net_code(exc))
     return body.decode("utf-8", "replace")
 
 
@@ -390,9 +440,11 @@ def _blank(current, repo):
         "repo": repo,
         "assets": [],
         "source": "",
-        # reason 是机器可读的码（not_found / rate_limited / …），
-        # detail 是给人读的句子，界面显示 detail。
+        # reason 是本模块内部的失败分类（not_found / rate_limited / …），
+        # 界面用它挑「检查失败」那一行的说明；code 才是跨模块统一的错误码，
+        # 界面优先按 code 翻译，取不到才回退到 detail（中文句子）。
         "reason": "",
+        "code": "",
         "detail": "",
         "error": "",
         "cached": False,
@@ -480,6 +532,7 @@ def check(current="", force=False, repo=None, *,
         except Exception as exc:  # noqa: BLE001 - 兜底：check() 的契约是永不抛
             out = _blank(current, repo)
             out["reason"] = "error"
+            out["code"] = net_code(exc)
             out["error"] = str(exc) or exc.__class__.__name__
             out["detail"] = out["error"]
             out["checked"] = True
@@ -494,18 +547,18 @@ def _lookup(current, repo, api, web, timeout, emit):
     try:
         rel = _release_from_api(repo, api, timeout)
     except Exception as exc:
-        reason, message = _describe(exc)
-        errors.append((reason, message))
-        emit("版本检查：接口查询失败（%s），改走发布订阅源" % message)
+        errors.append(_describe(exc))
+        emit("版本检查：接口查询失败（%s），改走发布订阅源" % errors[-1][1])
     if rel is None:
         try:
             rel = _release_from_atom(repo, web, timeout)
         except Exception as exc:
-            reason, message = _describe(exc)
-            errors.append((reason, message))
-            out["reason"] = _pick_reason(errors)
+            errors.append(_describe(exc))
+            reason, message, code = _pick(errors)
+            out["reason"] = reason
+            out["code"] = code
             out["error"] = _messages(errors)
-            out["detail"] = _FAIL_HINT.get(out["reason"], out["error"])
+            out["detail"] = _FAIL_HINT.get(reason, message or out["error"])
             stamp = _now()
             out["checked"] = True
             out["checked_at"] = int(stamp)
@@ -532,10 +585,13 @@ def _lookup(current, repo, api, web, timeout, emit):
         except Exception as exc:
             # 更新本身已经知道了；拿不到下载链接不该让这条消息消失。
             emit("版本检查：下载列表不可用（%s）" % _describe(exc)[1])
+            if not out["code"]:
+                out["code"] = _describe(exc)[2]
     out["assets"] = assets or []
     out["has_update"] = is_newer(out["latest"], out["current"])
     if not out["current"]:
         out["reason"] = "unknown_current"
+        out["code"] = "checkFailed"
         out["error"] = "当前版本未知，无法判断是否有更新"
         out["detail"] = out["error"]
     stamp = _now()

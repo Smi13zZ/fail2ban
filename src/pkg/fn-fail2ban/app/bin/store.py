@@ -1,4 +1,8 @@
-"""应用运行时存储：登录凭证、会话签名与界面偏好。
+"""应用运行时存储：界面偏好、会话签名与设备级 API Token。
+
+登录页已经删掉（打开面板即进管理界面），所以这里只剩两件事：
+读凭据文件里的 sessionSecret / apiToken，以及界面偏好。
+密码哈希那条路径随登录页一起撤掉了 —— 留着它只会让人以为面板还有口令。
 
 仅使用 Python 标准库，保证在 fnOS 上零依赖运行。
 """
@@ -156,32 +160,6 @@ def save_credentials(username: str, password: str) -> dict:
     return data
 
 
-def verify_password(username: str, password: str) -> bool:
-    data = load_credentials()
-    if not data:
-        return False
-    if not hmac.compare_digest(str(data.get("username", "")), username):
-        return False
-    info = data.get("password") or {}
-    try:
-        salt = base64.b64decode(info.get("salt", ""))
-        expected = base64.b64decode(info.get("hash", ""))
-        iterations = int(info.get("iterations", PBKDF2_ITERATIONS))
-    except (ValueError, TypeError, binascii.Error):
-        return False
-    if not salt or not expected:
-        return False
-    actual = _hash_password(password, salt, iterations)
-    return hmac.compare_digest(actual, expected)
-
-
-def change_password(username: str, old_password: str, new_password: str) -> bool:
-    if not verify_password(username, old_password):
-        return False
-    save_credentials(username, new_password)
-    return True
-
-
 def session_secret() -> str | None:
     data = load_credentials()
     if not data:
@@ -202,23 +180,9 @@ def api_token() -> str | None:
 # 会话（无状态签名令牌）
 # ---------------------------------------------------------------------------
 
-def _b64e(raw: bytes) -> str:
-    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
-
-
 def _b64d(text: str) -> bytes:
     padding = "=" * (-len(text) % 4)
     return base64.urlsafe_b64decode(text + padding)
-
-
-def issue_session(username: str, ttl: int = SESSION_TTL) -> str | None:
-    secret = session_secret()
-    if not secret:
-        return None
-    payload = {"u": username, "iat": int(time.time()), "exp": int(time.time()) + ttl}
-    body = _b64e(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
-    signature = hmac.new(secret.encode("utf-8"), body.encode("ascii"), hashlib.sha256).digest()
-    return f"{body}.{_b64e(signature)}"
 
 
 def verify_session(token: str | None) -> str | None:

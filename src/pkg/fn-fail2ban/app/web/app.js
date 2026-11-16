@@ -126,9 +126,19 @@
       before: '',
       phase: '',
       done: false,
+      // 服务端每次尝试递增的编号，以及「本轮之前那个编号」的基线。
+      // 服务端的失败状态是终态、不会自己回 idle，所以重试后的第一次轮询读到
+      // 的往往还是上一轮的死信；编号没超过基线就不属于本轮，接着轮询。
+      attempt: 0,
+      ignoreAttempt: 0,
+      // 安装脚本有没有回滚包可退。false 时不能说「失败会自动回滚」。
+      rollback: null,
       // 上一次一键升级的失败原因。遮罩一关就只剩 toast，用户回头想看
       // 「刚才到底为什么失败」就没处看了；留在设置页顶部更经得起回看。
       error: '',
+      // 与上面同一句话，但渲染在内容区顶部的独立失败条上 —— 用户可能已经
+      // 离开设置页，那条是唯一还看得见的地方。
+      failText: '',
       lastCheckAt: 0,
       lastFailAt: 0
     },
@@ -243,8 +253,12 @@
         var data = null;
         try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
         if (!res.ok) {
+          // code 一并挂到错误对象上：界面按它翻译，error 里的中文只给中文界面看。
+          // 挂 payload 是为了让调用方能读到 latest / rollback 这些附加字段。
           var err = new Error((data && data.error) || t('err.http', { code: res.status }));
           err.status = res.status;
+          err.code = (data && data.code) || '';
+          err.payload = data || {};
           throw err;
         }
         return data;
@@ -619,7 +633,9 @@
       try { sessionStorage.removeItem('f2b-upgrading'); } catch (e) { /* ignore */ }
       return;
     }
-    // 版本没变：还在升级途中，接着显示遮罩与轮询
+    // 版本没变：还在升级途中，接着显示遮罩与轮询。
+    // 这里不动 ignoreAttempt：页面已经重载过，上一轮的编号无从得知，重载后
+    // 读到的是服务端当前状态 —— 它若说失败，那就是这一轮的结论。
     state.update.before = before;
     openUpOverlay(t('update.upgrading'));
     paintUpStage(t('update.installingWait'));
@@ -689,11 +705,6 @@
   // 异步回来时要用它判断该不该重绘，否则数据回来了界面不动。
   function inSettingsTab(tab) {
     return state.view === 'settings' && state.setTab === tab;
-  }
-
-  // fn-knock 页同理：数据回来时要判断那块还在不在当前分区上，否则界面不动。
-  function inFnkTab(tab) {
-    return state.view === 'fnknock' && state.fnkTab === tab;
   }
 
   // 地址栏形如 #settings/notify；其余视图仍是 #jails。
@@ -1058,11 +1069,6 @@
 
   function kv(key, value) {
     return '<dt>' + esc(key) + '</dt><dd>' + value + '</dd>';
-  }
-
-  function shorten(text) {
-    text = String(text || '');
-    return text.length > 46 ? '…' + text.slice(-45) : text;
   }
 
   /* 三种状态各一个徽章，各自占一列（表格里并列显示，不再叠在名称下面）。
@@ -1755,8 +1761,10 @@
       listed.forEach(function (item) {
         var active = item.name === sel;
         var owners = item.usedBy || [];
-        html += '<tr data-act="filter-edit" data-name="' + esc(item.name) + '" ' +
-          'style="cursor:pointer' + (active ? ';background:var(--accent-soft)' : '') + '" ' +
+        // 选中态用类而不是内联样式：内联里的 var(--accent-soft) 让那个变量
+        // 在样式表里查不到引用，改主题时没人知道它还在生效。
+        html += '<tr class="filter-pick' + (active ? ' on' : '') + '" data-act="filter-edit" ' +
+          'data-name="' + esc(item.name) + '" ' +
           'data-search="' + esc(item.name.toLowerCase()) + '">' +
           '<td><strong>' + esc(item.name) + '</strong>' +
           (item.custom ? t('filter.badgeCustom') : '') +
@@ -2264,6 +2272,12 @@
         paintUpdateDot();
         paintUpdateBanner();
       }));
+      // 顺手取一次「当前版本有没有可回滚的包副本」。这件事只有后端知道
+      // （包在 @apphome 的工作区里），而它决定了这张卡片要不要说明
+      // 「安装失败时无法自动回滚」—— 不取就只能等真升级过一次才看得见。
+      tasks.push(api('update/progress').then(function (st) {
+        if (st && typeof st.rollback === 'boolean') state.update.rollback = st.rollback;
+      }).catch(function () { /* 拿不到就保持未知，不编造 */ }));
     } else if (tab === 'guide') {
       // 「说明」列的是真实路径与端口：settings 给写入位置，fnknock 给敲门那几张
       needSettings();
@@ -2586,10 +2600,6 @@
     return { value: value, label: value, hint: '', fields: [], secretFields: [] };
   }
 
-  function channelFields(typeValue) {
-    return channelTypeMeta(typeValue).fields || [];
-  }
-
   // 双语元数据：{key: {zh, en}}。当前语言没有就退中文原文，最后退后端下发的 label。
   function metaText(map, key, fallback) {
     if (!map) return fallback || '';
@@ -2715,9 +2725,6 @@
       '</div>';
   }
 
-  function switchRow(key, label, checked, help) {
-    return switchRowFor('notif', key, label, checked, help);
-  }
 
   function fmtSize(bytes) {
     if (typeof bytes !== 'number' || isNaN(bytes)) return '—';
@@ -3347,11 +3354,6 @@
     return html;
   }
 
-  function shortenPath(path) {
-    path = String(path || '');
-    if (path.length <= 64) return path;
-    return path.slice(0, 30) + '…' + path.slice(-30);
-  }
 
   function cleanStorage(target, button) {
     var data = storageReport() || {};
@@ -3583,8 +3585,14 @@
 
     // 上次升级失败的原因：遮罩关掉之后 toast 也就没了，
     // 这一行留在页面上，用户回头能看清是下载失败、校验失败还是安装脚本没起来。
+    // 顶部的失败条被用户关掉之后，这里仍然留着 —— 两处同源但各自可独立消失。
     if (state.update.error) {
       html += '<div class="update-error">' + esc(state.update.error) + '</div>';
+    }
+    // 回滚包不存在时必须诚实说明：安装失败时没有自动回滚这回事，
+    // 继续写「失败会自动回滚」等于承诺一件不会发生的事。
+    if (state.update.rollback === false && hasUpdate && !state.update.error) {
+      html += '<div class="update-error subtle">' + esc(t('update.noRollbackNotice')) + '</div>';
     }
 
     // 版本更新说明：可滚动、限高，长 changelog 不会把卡片撑成一屏多
@@ -3665,6 +3673,41 @@
     paintUpdateBanner();
   }
 
+  /* 更新失败条：任意页面都能看到的一句话 + 「查看详情」+ 单独关闭。
+     从横幅或概览页发起更新、失败后用户往往不在设置页，失败原因只渲染在设置卡片
+     里等于没有反馈 —— 这一条独立于设置页，是唯一还看得见的地方。 */
+  var UPFAIL_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/>' +
+    '<path d="M12 7.8v5"/><path d="M12 16.2v.01"/></svg>';
+
+  function paintUpdateFail() {
+    var bar = $('#upFail');
+    if (!bar) return;
+    var text = state.update.failText || '';
+    bar.hidden = !text;
+    if (!text) return;
+    var icon = $('#upFailIcon');
+    if (icon && !icon.firstChild) icon.innerHTML = UPFAIL_ICON;
+    var closeIcon = $('#upFailCloseIcon');
+    if (closeIcon && !closeIcon.firstChild) closeIcon.innerHTML = UPBANNER_CLOSE_ICON;
+    var body = $('#upFailText');
+    if (body) body.textContent = text;
+    var detail = $('#upFailDetail');
+    if (detail) detail.textContent = t('update.bannerDetail');
+    var close = $('#upFailClose');
+    if (close) {
+      close.title = t('common.close');
+      close.setAttribute('aria-label', t('common.close'));
+    }
+  }
+
+  function dismissUpdateFail() {
+    // 只关掉这条；state.update.error 留着，设置页那一行还在 —— 用户回头进设置
+    // 依然能看到刚才为什么失败。
+    state.update.failText = '';
+    paintUpdateFail();
+  }
+
   function openUpdateSection() {
     setSettingsTab('update');
     setView('settings', 'update');
@@ -3718,10 +3761,16 @@
       });
   }
 
-  // 升级遮罩：进度区高度固定，百分比只增不减；没有总量可测的阶段显示「准备中…」
+  // 升级遮罩：进度区高度固定，百分比只增不减；没有总量可测的阶段显示「准备中…」。
+  // 阶段文案一律由这里按当前语言拼 —— 后端只发语言中立的状态，它给的 detail
+  // 是中文回退文本，直接显示会让英文界面冒出中文。
   var UP_PHASE_KEYS = {
     idle: 'update.stagePreparing',
     preparing: 'update.stagePreparing',
+    // checking：点下按钮后先确认版本信息的那一小段。必须与「正在下载」分开，
+    // 否则进度条看起来已经开始跑了，实际上一个字节都还没到。
+    checking: 'update.stageChecking',
+    check: 'update.stageChecking',
     download: 'update.phaseDownload',
     downloading: 'update.phaseDownload',
     verify: 'update.phaseVerify',
@@ -3742,15 +3791,27 @@
     error: 'update.phaseFailed'
   };
 
-  // 后端真实阶段只有 idle / downloading / installing / failed 四个；
-  // 表里其余词是为安装脚本将来细分阶段留的前向兼容。认不出来的阶段不假装在
-  // 「准备中」，直接把后端给的 detail（中文句子）显示出来。
+  // 认不出来的阶段不假装在「准备中」：退回后端给的 detail（中文回退文本），
+  // 英文界面再按源文反查一次译文，查不到才原样显示。
   function upPhaseText(phase, detail) {
     var raw = String(phase || '').trim();
     var key = UP_PHASE_KEYS[raw.toLowerCase()];
     if (key) return t(key);
     if (detail) return tSrc(detail) || detail;
     return raw || t('update.stagePreparing');
+  }
+
+  // 错误码 → 文案。后端把失败拆成 code（语言中立）+ detail（中文），界面优先按
+  // code 翻译；查不到这条码（旧后端 / 新加的码）才退回 detail。
+  // 码认不出来时绝不能把码名印给用户。
+  function updateCodeText(code, fallback, version) {
+    var raw = String(code || '').trim();
+    if (raw) {
+      var key = 'update.code.' + raw;
+      var text = t(key);
+      if (text && text !== key) return t(key, { v: version || '' });
+    }
+    return localizedSource(fallback || '', 'update.phaseFailed') || t('update.phaseFailed');
   }
   // 升级遮罩的各个函数按「下载中 / 无总量可测」两种形态切换：
   // 前者显示进度条 + 大小 + 百分比，后者把同一块空间留给一句「准备中…」。
@@ -3808,8 +3869,12 @@
     if (overlay) overlay.hidden = true;
   }
 
-  // 进度区：done/total 都有才算百分比；没有总量就只留阶段文案。
-  // 百分比取历史最大值，避免服务端瞬时快照回跳造成进度倒退。
+  // 进度区只有两种形态，切换依据是「当前这一阶段有没有可测总量」：
+  //   * downloading 且拿到了 Content-Length → 进度条 + 真实字节 + 百分比；
+  //   * 其余一切（检查 / 安装 / 重启服务 / 无总量下载）→ 一句「准备中…」。
+  // 下载结束后的安装阶段不再显示百分比：那一段本来就无处可测，留着满格
+  // 进度条只是让人以为还有进度可看。成功的最后一帧由 finishUpgrade 单独画，
+  // 那里保留真实总量（例如 9.00 MB / 9.00 MB），绝不塞 100/100。
   function paintUpProgress(prog) {
     if (!prog) return;
     var phase = String(prog.phase || "").toLowerCase();
@@ -3821,10 +3886,11 @@
     var serverPct = Number(prog.percent);
     if (isNaN(serverPct)) serverPct = 0;
 
-    if (total > 0) {
+    if (phase === "downloading" && total > 0) {
       paintUpShape("track");
       var pct = Math.min(100, Math.floor((done / total) * 100));
       pct = Math.max(pct, Math.min(100, serverPct));
+      // 服务端是瞬时快照，网速快时两次轮询能差几十个百分点；显示值只增不减。
       if (pct > state.update.maxPct) state.update.maxPct = pct;
       var fill = $("#upProgFill");
       if (fill) fill.style.width = state.update.maxPct + "%";
@@ -3837,27 +3903,19 @@
       return;
     }
 
-    // 没有可测总量（准备 / 安装 / 服务重启）：不假装有百分比。
-    // 下载已经到 100% 时保留进度条满格，别让它看起来像是退回去了。
-    if (state.update.maxPct >= 100) {
-      paintUpShape("track");
-      var keepFill = $("#upProgFill");
-      if (keepFill) keepFill.style.width = "100%";
-      var keepPct = $("#upProgPct");
-      if (keepPct) keepPct.textContent = "100%";
-      var keepBytes = $("#upProgBytes");
-      if (keepBytes) keepBytes.textContent = "";
-      return;
-    }
     paintUpShape("ready");
-    // 从「下载中」切过来时百分比位要清空：留着一个上一阶段的数字会让人以为
-    // 安装阶段也有百分比可看。
+    // 从「下载中」切过来时百分比与字节都要清空：留着一个上一阶段的数字会让人
+    // 以为安装阶段也有进度可看。
     var clearPct = $("#upProgPct");
     if (clearPct) clearPct.textContent = "";
+    var clearBytes = $("#upProgBytes");
+    if (clearBytes) clearBytes.textContent = "";
     var ready = $("#upProgReady");
     if (ready) {
+      // detail 只在失败时才有内容，且是中文：英文界面按源文反查一次译文，
+      // 查不到就退回本地的「准备中…」，绝不让中文漏到英文界面上。
       ready.textContent = prog.detail
-        ? (tSrc(prog.detail) || t("update.stagePreparing"))
+        ? (localizedSource(prog.detail, "update.stagePreparing"))
         : t("update.stagePreparing");
     }
   }
@@ -3890,8 +3948,22 @@
       }
       api('update/progress').then(function (prog) {
         paintUpProgress(prog);
+        if (prog && typeof prog.attempt === 'number') {
+          state.update.attempt = prog.attempt;
+        }
+        if (prog && typeof prog.rollback === 'boolean') {
+          state.update.rollback = prog.rollback;
+        }
         var phase = String((prog && prog.phase) || '').toLowerCase();
         if (phase === 'failed' || phase === 'error') {
+          // 服务端的失败是终态，不会自己回到 idle。重试后的头几百毫秒读到的
+          // 还是上一轮的死信：编号没超过基线就说明它不属于本轮，接着轮询等
+          // 新一轮把阶段推下去 —— 否则弹窗会当场关闭、报上次的原因，而这次的
+          // 下载其实正在后台跑。
+          if (prog && typeof prog.attempt === 'number' &&
+              prog.attempt <= state.update.ignoreAttempt) {
+            return;
+          }
           stopUpdatePoll();
           finishUpgrade(false, prog, 'failed');
           return;
@@ -3907,7 +3979,9 @@
           var version = (meta && meta.app && meta.app.version) || '';
           if (state.update.before && version && version !== state.update.before) {
             stopUpdatePoll();
-            finishUpgrade(true, prog);
+            // 用 meta 报的新版本号收尾：progress 那一帧可能还是旧进程留下的
+            // 快照，直接用它会把「已更新到 v旧版本」写给用户看。
+            finishUpgrade(true, { current: version });
           }
         }).catch(function () { /* 升级中 meta 也可能短暂失败 */ });
       }).catch(function () {
@@ -3918,6 +3992,20 @@
       // 间隔拉长只能抓到一两个中间值，进度条看起来像「直接跳到 100%」。
     }, 400);
   }
+  // 把失败原因同时放到设置页那一行和内容区顶部的失败条上。
+  // 两处同一句话：用户可能已经离开设置页，那条失败条是唯一还看得见的地方。
+  function setUpdateFailure(text) {
+    state.update.error = text;
+    state.update.failText = text;
+    paintUpdateFail();
+  }
+
+  function clearUpdateFailure() {
+    state.update.error = "";
+    state.update.failText = "";
+    paintUpdateFail();
+  }
+
   // mode: "ok" 装完 / "failed" 后端明确报错 / "timeout" 我们等不到了（不代表升级失败）
   function finishUpgrade(ok, prog, mode) {
     var kind = ok ? "ok" : (mode || "failed");
@@ -3925,13 +4013,22 @@
     var spin = $("#upSpin");
     if (spin && ok) spin.classList.add("done");
     if (ok) {
+      // 成功那一帧不能编字节数：done/total 是字节计数器，塞 100/100 会渲染成
+      // 「100 B / 100 B」。下载结束后真实总量本来就在，保持不动；没有总量就
+      // 退回「准备中…」，绝不假装 100%。
       paintUpShape("track");
       var fill = $("#upProgFill");
       if (fill) fill.style.width = "100%";
       var pct = $("#upProgPct");
       if (pct) pct.textContent = "100%";
       var bytes = $("#upProgBytes");
-      if (bytes) bytes.textContent = "";
+      if (bytes) {
+        var total = Number(prog && prog.total) || 0;
+        var done = Number(prog && prog.done) || 0;
+        bytes.textContent = total > 0
+          ? t("update.bytes", { done: fmtSize(done), total: fmtSize(total) })
+          : "";
+      }
       paintUpStage(t("update.done", { v: (prog && prog.current) || "" }));
     } else if (kind === "timeout") {
       paintUpStage(t("update.pollTimeout"));
@@ -3943,18 +4040,26 @@
     if (reload) reload.hidden = false;
     if (ok) {
       try { sessionStorage.removeItem('f2b-upgrading'); } catch (e) { /* ignore */ }
+      clearUpdateFailure();
       toast(t("update.done", { v: (prog && prog.current) || "" }), "ok", 4000);
       setTimeout(function () { location.reload(); }, 1500);
     } else if (kind === "timeout") {
-      state.update.error = t("update.pollTimeout");
-      toast(t("update.pollTimeout"), "warn", 9000);
+      // 等不到了不代表升级失败。脚本是分离执行的，它到底回滚了还是没有回滚包，
+      // 只有 install.log 的最后几行知道 —— prog.outcome 由后端从日志里认出来。
+      var outcome = String((prog && prog.outcome) || "");
+      var text = outcome === "rolledBack"
+        ? t("update.installFailDetail", { detail: t("update.rolledBack") })
+        : (outcome === "noRollback"
+          ? t("update.installFailDetail", { detail: t("update.noRollbackNotice") })
+          : t("update.pollTimeout"));
+      setUpdateFailure(text);
+      toast(text, "warn", 9000);
     } else {
       // 后端明确报失败：没有升级在跑，别让下次刷新还弹「正在升级」
       try { sessionStorage.removeItem('f2b-upgrading'); } catch (e) { /* ignore */ }
-      var detail = (prog && (prog.detail || prog.error)) || "";
-      state.update.error = detail
-        ? t("update.installFailDetail", { detail: localizedSource(detail, "common.unknownError") })
-        : t("update.installFailDetail", { detail: t("update.phaseFailed") });
+      setUpdateFailure(t("update.installFailDetail", {
+        detail: updateCodeText(prog && prog.code, prog && (prog.detail || prog.error))
+      }));
       toast(state.update.error, "err", 9000);
     }
     // 失败/超时都要把这一行画到设置页上，不用等用户再点一次检查
@@ -3974,45 +4079,90 @@
     });
   }
 
+  /* 开一轮升级。
+     两件事的先后顺序决定了整个流程能不能被看懂：
+     1) 先单独读一次 status 记下基线编号 —— 页面刚打开时内存里没有任何编号，
+        而安装请求的返回值要等这次尝试结束才回来，靠它当基线已经太晚（那时
+        弹窗早就被上一轮的失败关掉了）。
+     2) 轮询先起来，再发安装请求 —— 后端在这个请求里同步做完版本确认与下载，
+        await 会一直挂到结束，等它返回才转向询的话，整个下载阶段零进度。 */
   function runUpgrade(target, button) {
     state.update.before = (state.meta && state.meta.app && state.meta.app.version) || "";
-    state.update.error = "";
+    clearUpdateFailure();
     // 升级期间页面可能被用户手动刷新（或者浏览器崩溃后恢复）。
     // 把「正在升级 + 升级前版本」留在 sessionStorage 里，重新载入时
     // 能自动接着轮询，而不是留一个没有任何提示的面板。
     try {
       sessionStorage.setItem('f2b-upgrading', state.update.before || '');
     } catch (e) { /* 隐私模式下写不进去就算了 */ }
+    // 基线取「内存里已知的编号」；随后用一次 status 把它更新成服务端当前值。
+    state.update.ignoreAttempt = Number(state.update.attempt) || 0;
     openUpOverlay(target ? t("update.installingTitle", { v: target }) : t("update.upgrading"));
-    paintUpStage(t("update.installingDownload"));
+    // 先显示「检查中…」而不是「正在下载」：安装请求的第一步是确认版本信息，
+    // 这段时间一个字节都还没到，写「正在下载」就是假装有进度。
+    paintUpStage(t("update.stageChecking"));
     if (button) busy(button, true);
-    // 轮询必须排在阻塞请求之前：后端在这个请求里同步下载安装包，
-    // await 会一直挂到下载结束，等它返回才起轮询就全程零进度。
-    pollUpdateProgress();
-    api("update/install", { method: "POST", body: {} })
+    api("update/progress").then(function (base) {
+      if (base && typeof base.attempt === 'number') {
+        state.update.ignoreAttempt = base.attempt;
+        state.update.attempt = base.attempt;
+      }
+    }).catch(function () { /* 读不到就沿用内存里的值 */ }).then(function () {
+      pollUpdateProgress();
+      return api("update/install", { method: "POST", body: {} });
+    })
       .then(function (data) {
-        // 后端没起来（缺安装包、权限不足等）会直接回 ok:false，别让轮询空转到超时
+        // 后端没起来（缺安装包、权限不足、已在升级）会直接回 ok:false，
+        // 别让轮询空转到超时。
         if (data && data.ok === false) {
           stopUpdatePoll();
           closeUpOverlay();
-          // 后端在忙时回 {ok:false, error:"busy"}，这是「已在升级」不是失败
-          if (data.error === "busy" || data.busy === true) {
+          var code = data.code || (data.error === "busy" ? "busy" : "");
+          if (code === "busy") {
             toast(t("update.installBlocked"), "warn", 5000);
             return;
           }
-          state.update.error = t("update.installFailDetail", {
-            detail: localizedSource(data.detail || data.error, "update.phaseFailed")
-          });
+          setUpdateFailure(t("update.installFailDetail", {
+            detail: updateCodeText(code, data.detail || data.error, data.version)
+          }));
           toast(state.update.error, "err", 9000);
           if (inSettingsTab('update')) renderSettings();
           return;
         }
+        // 认领本轮的编号：之后读到的、编号更大的失败才属于这一轮。
+        if (data && typeof data.attempt === 'number' && data.attempt > 0) {
+          state.update.attempt = data.attempt;
+        }
+        if (data && typeof data.rollback === 'boolean') state.update.rollback = data.rollback;
         if (data && data.phase) paintUpProgress(data);
-        toast(t("update.installing"), "ok", 3000);
       })
       .catch(function (err) {
-        stopUpdatePoll();
+        // 后端把「已在升级 / 没有可用更新」这类拒绝放在 4xx 里，code 挂在错误
+        // 对象上。先按 code 翻译，再决定要不要关遮罩。
+        var payload = (err && err.payload) || {};
+        var code = (err && err.code) || payload.code || "";
+        if (code === "busy") {
+          stopUpdatePoll();
+          closeUpOverlay();
+          toast(t("update.installBlocked"), "warn", 5000);
+          if (button) busy(button, false);
+          return;
+        }
+        if (code) {
+          // 有码 = 服务端明确拒绝了这次升级（已最新 / 无包 / 下载失败…）。
+          // 这种失败不需要再等，直接收掉遮罩并把原因摆出来。
+          stopUpdatePoll();
+          closeUpOverlay();
+          setUpdateFailure(t("update.installFailDetail", {
+            detail: updateCodeText(code, payload.error, payload.latest)
+          }));
+          toast(state.update.error, "err", 9000);
+          if (inSettingsTab('update')) renderSettings();
+          if (button) busy(button, false);
+          return;
+        }
         if (err && err.status === 409) {
+          stopUpdatePoll();
           closeUpOverlay();
           toast(t("update.installBlocked"), "warn");
         } else {
@@ -5999,6 +6149,12 @@
     var bannerClose = $('#upBannerClose');
     if (bannerClose) bannerClose.addEventListener('click', dismissUpdateBanner);
 
+    // 更新失败条的两个动作：跳设置页看详情 / 单独关掉这一条
+    var failDetail = $('#upFailDetail');
+    if (failDetail) failDetail.addEventListener('click', function () { openUpdateSection(); });
+    var failClose = $('#upFailClose');
+    if (failClose) failClose.addEventListener('click', dismissUpdateFail);
+
     // 站内确认框
     var confirmOk = $('#confirmOk');
     if (confirmOk) confirmOk.addEventListener('click', function () { closeConfirm(true); });
@@ -6082,6 +6238,10 @@
   function repaintForLang() {
     paintLangTag();
     paintStaticI18n();
+    // 两条横幅（新版本提示 / 更新失败）的文案是 JS 填的，不在 data-i18n 的
+    // 覆盖范围内，切语言要自己重画一遍。
+    paintUpdateBanner();
+    paintUpdateFail();
     // 徽章文字带 data-i18n（服务状态还没取到时显示「检测中…」），
     // 静态回填会把它改回「检测中…」，所以取到过状态时要再按状态重刷一次，
     // 否则切个语言，徽章上写的「运行中」就变回「检测中…」了。
@@ -6123,6 +6283,8 @@
       .then(enterApp)
       .then(function () {
         // 侧栏「更新」红点：读缓存（不发网络），再节流补一次真实检查
+        // 更新失败条不在这里画：它是本会话里发生过失败才出现的，页面刚加载时
+        // 没有失败可显示（重新载入后 state.update.failText 本来就是空的）。
         return api('update').then(function (info) {
           state.update.info = info;
           state.update.lastCheckAt = Date.now();

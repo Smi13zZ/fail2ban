@@ -2,6 +2,116 @@
 
 按版本倒序排列。安装包文件名带版本号，新版本一律用新号，不原地覆盖旧包。
 
+## 26.11.60
+
+一键更新全链路收口：失败不再被上一轮的残留遮蔽、失败提示任意页面可见、失败原因在
+英文界面不再冒出中文，回滚包终于能找到，同时清掉一批确认无引用的死代码。
+
+### 一、失败状态被上一轮的残留遮蔽（最要紧）
+
+服务端的状态机不会自己回到 idle：一次失败之后 `phase` 就一直停在 `failed`。
+而重试时第一步是确认版本信息（要访问网络），这期间阶段还没有被改写 —— 于是界面
+重试后的**第一个轮询**（400ms 后）读到的是**上一轮**的死信，弹窗当场关掉、报上次的
+原因，真正的下载却在后台跑。用户看到的是「点了没反应 + 一条早就看过的报错」。
+
+修法是给每轮尝试一个编号：
+
+| 位置 | 改动 |
+| --- | --- |
+| 后端 | 新增 `attempt`，每次尝试 +1；`phase` 增加 `checking`，认领后立即置为该阶段 |
+| `/api/update/install` | 先认领编号（不碰网络），再查版本；任何中途退出都落到 `failed` |
+| 前端 | 发请求前先读一次 status 拿基线，轮询遇到 `failed` 且 `attempt <= 基线` 就跳过继续轮 |
+| 前端 | 安装接口的返回值也带 `attempt`，收到后更新基线 |
+
+进行中判定也跟着扩到 `checking`：连点两次不会起两个下载，第二次直接拿到 `busy`。
+
+### 二、点下按钮后不要先强制重查
+
+原先「一键更新」的第一件事是强制查一次网络版本。那几秒里进度条上一个字节都没有 ——
+看起来像没开始。现在优先用界面上已有的版本信息（点按钮时页面上就写着「有新版本 vX」），
+只有缓存里确实没有答案时才查；并且那一段显示的是「检查中…」，不是假装在下载。
+
+### 三、回滚包永远找不到
+
+包实际下载到 `@apphome` 下的工作区（卸载不会清空，包才能活过 uninstall → install），
+而回滚包查找只扫 `/vol1/@appshare/...` 与 `/tmp` —— 两处都不是包所在的地方，
+所以安装脚本的回滚分支**从来没有执行过一次**。
+
+现在查找顺序把包目录放在第一位，同一前缀里取**最新的一份**（按 mtime），并排除本次
+刚下载的那个（它就是待安装的新包，拿它当回滚包等于把失败现场重装一遍）。
+
+找不到时界面不再承诺「会自动回滚」，改为明说：当前版本没有可用的安装包副本，
+安装失败时无法自动回滚，需要到飞牛应用中心手动处理。
+
+### 四、失败提示必须在任意页面可见
+
+从概览页的横幅或概览页发起更新、失败后用户并不在设置页。原先失败原因只渲染在
+设置卡片的 `div.update-error` 里 —— 切到别的页面就一个字都看不到。
+
+现在内容区顶部多一条独立于设置页的失败条（危险色，与新版本提示条同一套版式）：
+一句话 + 「查看详情」跳设置里的更新分区 + 单独关闭。设置页那一行仍然保留，
+两处同源、各自可独立消失。窄屏按提示条的同一套规则重排。
+
+### 五、错误码化：英文界面不再出现中文
+
+后端原先只回一句中文 `detail`，英文界面只能原样显示。现在失败拆成两样下发：
+`code`（语言中立标识，界面按它翻译）+ `detail`（中文，给中文界面与日志的回退文本）。
+
+新增的码（中英两本字典都补齐）：`netDns` / `netTimeout` / `netRefused` /
+`netReset` / `netTls` / `gh403` / `gh404` / `checkFailed` / `upToDate` /
+`noAsset` / `noDir` / `noScript` / `busy` / `pkgTooBig` / `pkgUnreadable` /
+`pkgStructure` / `pkgAppName` / `pkgVersion` / `pkgMissing` / `noCli`。
+
+网络异常按真实类型归类（`URLError.reason` 会套两层，递归拆壳），
+不再一律显示成一句泛泛的「网络错误」。版本检查与一键升级共用同一张码表。
+
+成功路径上的 `detail` 一律清空：阶段文案由界面按当前语言自己拼。
+
+### 六、进度区与成功帧
+
+- 进度条只在「下载中且拿到了 Content-Length」时出现；检查、安装、重启服务三个
+  阶段一律显示「准备中…」，不假装有百分比。下载结束后也不再留一条满格进度条。
+- 成功那一帧保留**真实总量**（如 `9.00 MB / 9.00 MB`），绝不塞 `100/100` ——
+  那两个是字节计数器，会渲染成 `100 B / 100 B`。没有总量就不显示字节。
+- 等待超时不再一律说「等待超时」：后端从安装脚本日志里认出结局，回滚了就说
+  「新版本未能启动，已回滚到当前版本」，没有回滚包就说无法自动回滚。
+
+### 七、存储页的嵌套关系按实际包含关系判定
+
+「升级安装日志」原先写死 `nested=False`。在包目录指向 `@apphome` 的部署下这没错，
+但拿不到 installer 时「更新缓存」会退回 `@appdata/update`，那时 install.log 就在
+它内部，再标 False 会让合计把它算两遍。现在按 realpath 的真实包含关系重新判定，
+新增的验收用例锁死「合计 = 非嵌套行之和」。
+
+### 八、死代码清理
+
+审计带变异自检（注入一个假成员，确认规则抓得到），否则「0 个」可能只是规则失效。
+
+| 类别 | 清掉的内容 |
+| --- | --- |
+| i18n 键 | 42 条无引用词条（通知渠道的 `notify.ch*`/`notify.fd*`/`notify.hint*` 一组、`update.hasUpdate`/`upToDate`/`unknown`/`noRepo`/`phaseInstall`/`installing`/`installingDownload`/`verifying`、`stor.colPath`/`varDir`/`currentVersion` 等） |
+| 前端函数 | `shorten` / `shortenPath` / `inFnkTab` / `channelFields` / `switchRow` |
+| 后端函数 | `banlog.reset_cache` / `fnknock.blacklist_status` / `jailconf.set_enabled` / `store.change_password` / `store.verify_password` / `store.issue_session` / `installer._env_path` |
+| 后端常量 | `storage.SNAPSHOT_KEEP_MIN` / `installer.PHASES`（换成具名阶段常量） |
+| CSS 变量 | `--panel` / `--panel-2` / `--bg-soft` / `--accent` / `--hover` / `--shadow` / `--log-warn` |
+| CSS 规则 | 26 个无引用的类（`.nav-item` 兼容写法、`.row-actions`、`.evgrid`/`.evrow`/`.evtext`、`.tfixed`、`.picker-trigger`、`.channel-url`、`.card-h4` 等） |
+
+过滤器列表的选中底色原先是内联 `style="background:var(--accent-soft)"`，改成
+`.filter-pick.on` 这样变量重新回到样式表里可查。
+
+### 九、新增两道闸门
+
+`tools/preflight.py` 与 CI 都加了两步，它们覆盖语法检查看不到的东西：
+
+1. `tools/test_update_flow.py` —— 打桩网络与安装器，真跑一遍：本地起 HTTP 服务
+   验「中断下载不留假包」「走 .part 再原子改名」；错误码映射（gaierror→netDns、
+   HTTP403→gh403、timeout→netTimeout、SSL→netTls）；回滚包在包目录里被找到且取
+   最新的、排除本次待装的；存储合计等于非嵌套行之和；两次尝试 attempt 递增；
+   「检查中」再点返回 busy；新一轮不被上一轮死信打断；坏包/空包的码。
+2. `tools/test_backup_restore.py` —— 备份恢复回归，一直在跑但没进闸门。
+
+CI 现在 12 步；本地 `python tools/preflight.py` 一条命令跑齐同样的 10 道闸门。
+
 ## 26.11.59
 
 卡片脚注与上方内容之间补上间距，不再「贴」在最后一行上。

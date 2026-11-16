@@ -388,10 +388,6 @@ def list_blacklist(page: int = 1, limit: int = 20, search: str = "",
     return request("GET", "/api/admin/general-blacklist" + query, settings=settings)
 
 
-def blacklist_status(ips, settings: dict | None = None) -> dict:
-    return request("POST", "/api/admin/general-blacklist/status",
-                   {"ips": normalize_ips(ips)}, settings=settings)
-
 
 def add_ips(ips, comment: str = "", source: str = "",
             settings: dict | None = None) -> dict:

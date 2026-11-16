@@ -125,6 +125,19 @@
               title="关闭" aria-label="关闭"><span id="upBannerCloseIcon"></span></button>
     </div>
 
+    <!-- 更新失败条：与提示条并列，出现在每个页面顶部。
+         从横幅或概览页发起更新、失败后用户并不在设置页 —— 失败原因原先只渲染在
+         设置卡片里，切到别的页面就一个字都看不到，看起来像什么都没发生。
+         这条自带「查看详情」与关闭按钮，不依赖设置页是否打开。 -->
+    <div class="upfail" id="upFail" hidden>
+      <span class="upfail-ic" id="upFailIcon" aria-hidden="true"></span>
+      <div class="upfail-text" id="upFailText"></div>
+      <div class="spacer"></div>
+      <button class="btn sm" type="button" id="upFailDetail">查看详情</button>
+      <button class="icon-btn ghost upbanner-x" type="button" id="upFailClose"
+              title="关闭" aria-label="关闭"><span id="upFailCloseIcon"></span></button>
+    </div>
+
     <main id="view"></main>
   </div>
 </div>

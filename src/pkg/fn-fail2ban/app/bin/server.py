@@ -38,7 +38,7 @@ import store  # noqa: E402
 import update  # noqa: E402
 
 APP_NAME = os.environ.get("TRIM_APPNAME") or "fn-fail2ban"
-APP_VERSION = "26.11.59"
+APP_VERSION = "26.11.60"
 PORT = int(os.environ.get("TRIM_SERVICE_PORT") or os.environ.get("F2B_PORT") or 18752)
 BIND_ADDR = os.environ.get("F2B_BIND") or "0.0.0.0"
 READY_FILE = os.environ.get("F2B_READYFILE") or os.path.join(store.VAR_DIR, "server.ready")
@@ -82,23 +82,47 @@ for _item in re.split(r"[\s,]+", _ALLOW_SPEC):
 
 
 def app_version() -> str:
-    manifest = os.path.join(os.path.dirname(store.APP_DIR.rstrip("/")), "manifest")
-    for candidate in (manifest, os.path.join(store.APP_DIR, "manifest")):
+    """读设备上已安装包的版本号；读不到才退回模块常量。
+
+    候选路径都试一遍是必要的：在设备上 TRIM_APPDEST 指向 /vol1/@appcenter/<app>
+    （app.tgz 解出来的那棵子树），外层 manifest 根本不在它里面 —— 只按
+    「APP_DIR 的上一级」拼，永远读不到文件，于是每次都退回常量。常量一旦忘了
+    跟着 manifest 走，面板就会对着自己报上一个版本号：版本检查显示「有新版本」、
+    一键更新的目标版本算错，全都源于这一处。
+
+    所以第一顺位用 /var/apps/<app>/manifest —— 那是 fnOS 已安装应用的登记点，
+    升级后它立刻反映新版本号，比任何进程序列化下来的常量都可信。
+    """
+    candidates = [
+        "/var/apps/%s/manifest" % APP_NAME,
+        os.path.join(os.path.dirname(store.APP_DIR.rstrip("/")), "manifest"),
+        os.path.join(store.APP_DIR, "manifest"),
+    ]
+    for candidate in candidates:
         try:
             with open(candidate, "r", encoding="utf-8", errors="replace") as handle:
                 for line in handle:
                     if line.startswith("version"):
-                        return line.partition("=")[2].strip().strip('"')
+                        value = line.partition("=")[2].strip().strip('"')
+                        if value:
+                            return value
         except OSError:
             continue
     return APP_VERSION
 
 
 class ApiError(Exception):
-    def __init__(self, message: str, status: int = 400):
+    """接口失败。message 是中文（可直接显示），code 是语言中立标识。
+
+    界面优先按 code 翻译，所以凡是能让用户看到失败的地方都要带上码 —— 英文界面
+    只靠 message 就只能印中文。code 为空表示没有对应码，界面回退到 message。
+    """
+
+    def __init__(self, message: str, status: int = 400, code: str = ""):
         super().__init__(message)
         self.message = message
         self.status = status
+        self.code = code
 
 
 class RawResponse:
@@ -1304,17 +1328,50 @@ def h_update(handler, params, body):
     return payload
 
 
+def _update_fail_detail(info, fallback):
+    """版本检查失败时给中文界面/日志的一句话（code 才是界面的判据）。"""
+    text = str((info or {}).get("detail") or (info or {}).get("error") or "").strip()
+    return text or fallback
+
+
 def h_update_install(handler, params, body):
+    """一键更新：先认领本轮编号，再用界面上已有的版本信息开工。
+
+    顺序是刻意的。先 begin_attempt() 把阶段置成 checking 并递增编号 —— 这一步
+    不碰网络，所以「连点两次」在第二个请求到达时就被 busy 挡掉；而如果先查版本，
+    两个请求会同时排在网络查询上，各自起一个下载。编号也必须先发出去，界面才能
+    把「上一轮留下的 failed」判定成死信。
+
+    版本信息优先用缓存：点下按钮时页面上已经写着「有新版本 vX」，再去强制查一次
+    只是白白多等几秒，而这几秒里进度条上没有任何字节可显示，看起来就像没开始。
+    只有缓存里明确没有更新时才真查一次，那时界面显示的是「检查中…」而不是假下载。
+
+    任何一条中途退出都必须走 installer.fail_attempt()。begin_attempt() 已经把
+    阶段置成 checking 了，直接抛异常会把状态永久钉在「进行中」—— 之后每次点击
+    都是 busy，只有重启服务才解得开。
+    """
+    no = installer.begin_attempt()
+    if not no:
+        raise ApiError("更新已在进行中", 409, code="busy")
+
     info = update.cached(app_version())
     if not info.get("has_update"):
+        # 缓存没有答案（或答案就是「已最新」）才去查。这一段的阶段文案由前端
+        # 按 checking 拼「检查中…」，不是「正在下载」。
         info = update.check(app_version(), force=True)
+    if not info.get("ok"):
+        code = info.get("code") or "checkFailed"
+        installer.fail_attempt(code, _update_fail_detail(info, "无法获取版本信息"))
+        raise ApiError(_update_fail_detail(info, "无法获取版本信息"), 409, code=code)
     if not info.get("has_update"):
-        raise ApiError("当前没有可用更新")
+        installer.fail_attempt("upToDate", "当前已是最新版本")
+        raise ApiError("当前已是最新版本", 409, code="upToDate")
     # 资产挑选交给 installer：它知道平台后缀与"绝不下载非 .fpk"这两条规则，
     # 在处理器里重写一遍等于给"卸载完才发现包不对"留了个口子。
     asset = installer.pick_asset(info)
     if not asset:
-        raise ApiError("该版本没有可下载的安装包", 404)
+        installer.fail_attempt("noAsset", "该版本没有可下载的安装包")
+        raise ApiError("该版本没有可下载的安装包", 409, code="noAsset")
     # 带上当前生效的 DEFAULT 策略：向导字段要用它回填，否则一次升级会把
     # bantime / maxretry / ignoreip 退回内置默认值。
     policy = installer.current_policy()
@@ -1325,9 +1382,11 @@ def h_update_install(handler, params, body):
         current=app_version(),
         settings=policy,
         log=lambda msg: None,
+        attempt_no=no,
     )
     if not result.get("ok"):
-        raise ApiError(result.get("error") or "无法开始升级", 409)
+        raise ApiError(result.get("error") or "无法开始升级", 409,
+                       code=result.get("code") or "")
     return result
 
 
@@ -1624,7 +1683,11 @@ class PanelHandler(BaseHTTPRequestHandler):
                 self._json(405, {"error": "方法不被允许"})
 
         except ApiError as exc:
-            self._json(exc.status, {"error": exc.message})
+            # code 一并下发：界面按它翻译，error 里的中文只给中文界面和日志看。
+            payload = {"error": exc.message}
+            if exc.code:
+                payload["code"] = exc.code
+            self._json(exc.status, payload)
         except f2b.Fail2banError as exc:
             self._json(500, {"error": str(exc)})
         except BrokenPipeError:

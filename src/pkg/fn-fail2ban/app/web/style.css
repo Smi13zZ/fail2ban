@@ -16,7 +16,6 @@
   --sidebar: #fafafa;
   --card: #ffffff;
   --muted: #f5f5f5;
-  --hover: #f5f5f5;
   --border: #e5e5e5;
   --border-soft: #efefef;
 
@@ -45,18 +44,15 @@
   --log-ban: #b91c1c;
   --log-unban: #15803d;
   --log-found: #b45309;
-  --log-warn: #525252;
 
-  /* --- 语义别名：前端脚本与内联样式仍在引用这些名字 --- */
-  --panel: var(--card);
-  --panel-2: var(--muted);
-  --bg-soft: var(--muted);
-  --accent: var(--primary);
+  /* --- 语义别名：只保留真正被引用的那几个 ---
+     --accent-soft 用在脚本拼的内联样式里（工具栏当前项的底色），其余三个软色
+     给状态块当底。历史上还有 --panel / --panel-2 / --bg-soft / --accent /
+     --shadow 五个别名，样式表里一处都没有引用 —— 留着只会让人以为改它有效。 */
   --accent-soft: color-mix(in srgb, var(--text) 8%, transparent);
   --ok-soft: color-mix(in srgb, var(--ok) 12%, transparent);
   --warn-soft: color-mix(in srgb, var(--warn) 12%, transparent);
   --danger-soft: color-mix(in srgb, var(--danger) 10%, transparent);
-  --shadow: var(--shadow-pop);
 
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
@@ -70,7 +66,6 @@
   --sidebar: #1c1c1c;
   --card: #1c1c1c;
   --muted: #262626;
-  --hover: #262626;
   --border: rgba(255, 255, 255, .10);
   --border-soft: rgba(255, 255, 255, .07);
 
@@ -97,7 +92,6 @@
   --log-ban: #ff6467;
   --log-unban: #4ade80;
   --log-found: #fbbf24;
-  --log-warn: #a1a1a1;
 
   color-scheme: dark;
 }
@@ -138,11 +132,6 @@ h1, h2, h3, h4 { letter-spacing: -.01em; }
 }
 input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; }
 
-.sr-only {
-  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
-}
-
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
@@ -154,7 +143,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .mono { font-family: var(--mono); font-size: 12.5px; }
 .dim { color: var(--dim); }
 .faint { color: var(--faint); }
-.nowrap { white-space: nowrap; }
 .spacer { flex: 1; }
 /* 行内排布小工具：app.js 里有用 <div class="row"> 组输入框的写法 */
 .row { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -192,9 +180,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   overscroll-behavior: contain;
 }
 
-/* 导航项（.nav button 是既有结构；.nav-item / .on 是兼容写法） */
-.nav button,
-.nav .nav-item {
+/* 导航项 */
+.nav button {
   position: relative;
   display: flex;
   align-items: center;
@@ -214,26 +201,22 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   transition: background .12s, color .12s;
 }
 
-.nav button svg,
-.nav .nav-item svg { width: 18px; height: 18px; flex: 0 0 18px; stroke-width: 2.1; }
+.nav button svg { width: 18px; height: 18px; flex: 0 0 18px; stroke-width: 2.1; }
 
-.nav button span:first-of-type,
-.nav .nav-item .label {
+.nav button span:first-of-type {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.nav button:hover,
-.nav .nav-item:hover {
+.nav button:hover {
   background: color-mix(in srgb, var(--text) 5%, transparent);
   color: var(--text);
 }
 
 /* 激活项：整行反色药丸 */
-.nav button.active,
-.nav .nav-item.on {
+.nav button.active {
   background: var(--nav-active);
   color: var(--nav-active-fg);
   font-weight: 600;
@@ -360,18 +343,14 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 @media (min-width: 901px) {
   .app.collapsed .sidebar { width: 62px; flex-basis: 62px; }
   .app.collapsed .nav { padding: 14px 8px 12px; }
-  .app.collapsed .nav button,
-  .app.collapsed .nav .nav-item {
+  .app.collapsed .nav button {
     justify-content: center;
     padding: 8px 0;
     gap: 0;
     min-height: 38px;
   }
-  .app.collapsed .nav button span,
-  .app.collapsed .nav .nav-item .label,
-  .app.collapsed .nav .nav-item .badge { display: none; }
-  .app.collapsed .nav button svg,
-  .app.collapsed .nav .nav-item svg { width: 19px; height: 19px; flex-basis: 19px; }
+  .app.collapsed .nav button span { display: none; }
+  .app.collapsed .nav button svg { width: 19px; height: 19px; flex-basis: 19px; }
 
   .app.collapsed .sidebar-foot { align-items: center; padding-left: 8px; padding-right: 8px; }
   /* 62px 轨道里并排放不下两个按钮，改成竖排；按钮本身保持 34×34，
@@ -398,8 +377,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 }
 
 .page-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.page-head h1,
-.page-title {
+.page-head h1 {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
@@ -499,7 +477,6 @@ main {
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
-.stat .value.small { font-size: 16px; letter-spacing: -.01em; word-break: break-all; }
 .stat .foot { font-size: 12px; color: var(--faint); }
 
 /* -------------------------------------------------------------- 按钮 --- */
@@ -548,7 +525,7 @@ main {
 .btn.danger.ghost:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger); }
 
 .btn.sm { height: 30px; padding: 0 10px; font-size: 13px; border-radius: var(--radius-sm); }
-.btn.wide, .btn.block { width: 100%; }
+.btn.wide { width: 100%; }
 a.btn { text-decoration: none; }
 
 /* -------------------------------------------------------------- 徽章 --- */
@@ -998,14 +975,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
 
 
-/* 行内操作：默认淡出，行悬停 / 选中时浮现 */
-.row-actions {
-  display: flex;
-  gap: 6px;
-  justify-content: flex-end;
-  align-items: center;
-}
-
 .cell-actions {
   display: flex;
   gap: 6px;
@@ -1019,23 +988,18 @@ tbody tr.sel .cell-actions,
 tbody tr:focus-within .cell-actions { opacity: 1; }
 
 /* 表格里的按钮退成幽灵态，避免每行都是白底方框 */
-td .row-actions .btn,
 td .cell-actions .btn {
   background: transparent;
   border-color: transparent;
   color: var(--dim);
 }
-tbody tr:hover td .row-actions .btn,
 tbody tr:hover td .cell-actions .btn { color: var(--text); }
-td .row-actions .btn:hover,
 td .cell-actions .btn:hover {
   background: color-mix(in srgb, var(--text) 10%, var(--card));
   border-color: var(--border);
   color: var(--text);
 }
-td .row-actions .btn.danger,
 td .cell-actions .btn.danger { color: var(--danger); }
-td .row-actions .btn.danger:hover,
 td .cell-actions .btn.danger:hover {
   background: var(--danger-soft);
   border-color: transparent;
@@ -1539,6 +1503,11 @@ details.raw pre {
   white-space: nowrap;
 }
 .log-more:hover { background: var(--muted); color: var(--text); }
+/* 过滤器列表的可选行：整行可点，当前项上底色。
+   底色走 --accent-soft（正文色的 8% 混色），与工具栏选中项一致。 */
+.filter-pick { cursor: pointer; }
+.filter-pick.on { background: var(--accent-soft); }
+
 .logline.err .m { color: var(--log-ban); }
 .logline.ok .m { color: var(--log-unban); }
 .logline.warn .m { color: var(--log-found); }
@@ -1666,10 +1635,6 @@ details.raw pre {
   white-space: pre-wrap;
   word-break: break-all;
 }
-.log-box .l-ban { color: var(--log-ban); }
-.log-box .l-unban { color: var(--log-unban); }
-.log-box .l-found { color: var(--log-found); }
-.log-box .l-warn { color: var(--log-warn); }
 
 /* ---------------------------------------------------------- 事件列表 --- */
 
@@ -1721,12 +1686,6 @@ details.raw pre {
   font-variant-numeric: tabular-nums;
 }
 
-.channel-url {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--dim);
-  word-break: break-all;
-}
 /* 通知渠道表在手机上只有 390px：类型名（钉钉机器人 / 企业微信应用消息）
    原本被压成竖排两行。表格改用固定布局并给关键列定宽，让「名称 / 类型」先拿到
    足够宽度，长 URL 那一列用省略号收尾（完整地址在抽屉里能看到）。 */
@@ -1738,13 +1697,6 @@ details.raw pre {
   .table-wrap table:not(.fixed) { table-layout: auto; }
   .table-wrap td strong,
   .table-wrap td:nth-child(2) { white-space: nowrap; }
-  .channel-url {
-    max-width: 120px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    word-break: normal;
-  }
 }
 
 /* ------------------------------------------------------------ 首屏 --- */
@@ -1817,7 +1769,7 @@ details.raw pre {
 /* 触屏没有 hover：行内操作常驻 */
 @media (hover: none) {
   .cell-actions { opacity: 1; }
-  td .row-actions .btn, td .cell-actions .btn { color: var(--dim); }
+  td .cell-actions .btn { color: var(--dim); }
 }
 
 /* 中屏：4 列在 ≤1180px 就挤了（每列不足 220px），先降到 2 列 */
@@ -1930,7 +1882,7 @@ details.raw pre {
      同字号。手机上把行距再拉大会让 7 项撑满整屏、还得滚动，
      反而更难一眼扫完。 */
   .nav { padding: 10px 8px; }
-  .nav button, .nav .nav-item { min-height: 36px; font-size: 14px; }
+  .nav button { min-height: 36px; font-size: 14px; }
 
   .grid.cols-4, .grid.cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .kv { grid-template-columns: 104px minmax(0, 1fr); gap: 8px 12px; }
@@ -2139,6 +2091,41 @@ details.raw pre {
 .upbanner-x { width: 28px; height: 28px; flex: 0 0 28px; }
 .upbanner-x svg { width: 16px; height: 16px; }
 
+/* --------------------------------------------- 更新失败条（每个页面） --- */
+
+/* 与上面的新版本提示条同一套版式，只是换成危险色。
+   它必须独立于设置页：用户从概览页的横幅点「一键更新」失败时并不在设置页，
+   失败原因只渲染在设置卡片里等于没有反馈。 */
+.upfail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 16px 18px 0;
+  padding: 11px 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: color-mix(in srgb, var(--danger) 9%, var(--card));
+  border-radius: var(--radius-lg);
+  flex: 0 0 auto;
+}
+.upfail[hidden] { display: none; }
+.upfail-ic {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  color: var(--danger);
+}
+.upfail-ic svg { width: 18px; height: 18px; }
+.upfail-text {
+  font-size: 13px;
+  font-weight: 500;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  flex: 1 1 auto;
+}
+
 /* ------------------------------------------------- 侧栏「更新」红点 --- */
 
 /* 侧栏导航项末尾的小红点（有新版本时出现）。
@@ -2152,10 +2139,8 @@ details.raw pre {
    背景盖掉，看起来仍是个灰点。 */
 .nav button .nav-badge.nav-alert,
 .nav button.active .nav-badge.nav-alert,
-.nav .nav-item .nav-badge.nav-alert,
 .nav button .nav-badge.nav-alert:empty,
-.nav button.active .nav-badge.nav-alert:empty,
-.nav .nav-item .nav-badge.nav-alert:empty {
+.nav button.active .nav-badge.nav-alert:empty {
   display: inline-block;
   flex: 0 0 auto;
   min-width: 0;
@@ -2306,22 +2291,6 @@ details.raw pre {
 /* 消息字段区（渠道编辑抽屉）与密钥提示 */
 .channel-fields { margin-top: 12px; }
 .secret-hint { margin-top: 4px; color: var(--faint); font-size: 11.5px; }
-.evgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.evrow {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  cursor: pointer;
-  font-size: 13px;
-  min-width: 0;
-}
-.evrow:hover { background: var(--muted); }
-.evtext { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.evtext b { font-weight: 600; }
-.evtext .d { color: var(--faint); font-size: 12px; line-height: 1.4; }
 
 /* ---------------------------------------------------------- 存储页 --- */
 .storage-total {
@@ -2340,25 +2309,6 @@ details.raw pre {
 .storage-total .faint { font-size: 11.5px; word-break: break-all; min-width: 0; }
 .storage-h4 { margin: 18px 0 8px; font-size: 13px; font-weight: 600; }
 .storage-h4:first-child { margin-top: 0; }
-.strow { display: flex; align-items: flex-start; gap: 18px; }
-
-/* 存储表：路径列必须能收缩，否则定宽布局下它按最长不可断词撑开整张表 */
-/* 定宽布局 + 显式列宽：auto 布局下路径列按最长不可断词撑开，
-   会把「项目 / 大小」挤成很窄的一条，表头与单元格还会各走各的。 */
-/* 只给存储页的主表定宽：备份表与安装包表的列更少、名称也是定长的，
-   一起定宽会把「时间」列压成两行。 */
-/* 只有主表定宽（四列：项目/大小/文件数/路径）。备份表与安装包表列少、
-   名称本身也是定长，一起定宽会把「时间」列压成两行。 */
-.ttable.tfixed { table-layout: fixed; }
-.ttable.tfixed th:nth-child(1), .ttable.tfixed td:nth-child(1) { width: auto; }
-.ttable.tfixed th:nth-child(2), .ttable.tfixed td:nth-child(2) { width: 96px; }
-.ttable.tfixed th:nth-child(3), .ttable.tfixed td:nth-child(3) { width: 80px; }
-.ttable.tfixed th:nth-child(4), .ttable.tfixed td:nth-child(4) { width: 320px; }
-.ttable.tfixed td:nth-child(4) {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 /* 备份表与安装包表：时间列不换行 */
 .ttable.tstorage td:nth-child(3).dim { white-space: nowrap; }
 .ttable.tstorage .sname { min-width: 0; }
@@ -2652,8 +2602,6 @@ details.raw pre {
 
 /* --------------------------------------------------- 新增页面的响应式 --- */
 @media (max-width: 900px) {
-  .evgrid { grid-template-columns: minmax(0, 1fr); }
-  .strow { flex-direction: column; gap: 10px; }
 }
 
 @media (max-width: 720px) {
@@ -2914,6 +2862,13 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
   /* 新版本提示条：手机上标题占第一行，主按钮独占第二行（拇指够得到），
      关闭按钮贴着第一行右端。与另一条产品线同一套排法。 */
   .upbanner { gap: 8px; padding: 10px 12px; margin: 10px 12px 0; }
+  /* 失败条与提示条同处内容区顶部，窄屏也要跟着收窄并重排 */
+  .upfail { gap: 8px; padding: 10px 12px; margin: 10px 12px 0; }
+  .upfail .spacer { display: none; }
+  .upfail-ic { order: 1; }
+  .upfail-text { order: 2; flex: 1 1 calc(100% - 40px); font-size: 12.5px; }
+  .upfail .btn { order: 3; flex: 1 1 auto; }
+  .upfail .upbanner-x { order: 4; flex: 0 0 28px; }
   .upbanner .spacer { display: none; }
   .upbanner-btn { display: none; }
   .upbanner-ic { order: 1; }
@@ -3016,38 +2971,12 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
 }
 
 /* 行内强调用的语气色。只在段落里夹一句，不整块上色。 */
-.danger-text { color: var(--danger); }
 .warn-text { color: color-mix(in srgb, var(--warn) 72%, var(--text)); }
 
 /* ------------------------------------------------- 手机端选择器 --- */
 
 /* 原生 <select> 在手机上弹出的是系统自带列表：主题、行高、触控尺寸都是另一套，
    和面板其它部分对不上。手机上改用下面的底部选择条，样式与面板同一套令牌。 */
-.picker-trigger {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-}
-.picker-trigger .v {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.picker-trigger::after {
-  /* 与 .select 右侧的实心三角一致 */
-  content: "";
-  flex: 0 0 auto;
-  width: 0;
-  height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 5px solid var(--faint);
-}
 .picker-mask {
   position: fixed;
   inset: 0;
@@ -3207,13 +3136,6 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
 .chin { min-width: 0; }
 .chname { font-size: 13.5px; font-weight: 600; }
 .chmeta { font-size: 12px; color: var(--faint); margin-top: 1px; }
-.chsum {
-  font-size: 12px;
-  color: var(--dim);
-  margin-top: 3px;
-  overflow-wrap: anywhere;
-}
-
 /* 空态图标：比文字大一号、压到 35% 透明，看起来是「这里还空着」而不是报错 */
 .empty-ic { display: flex; opacity: .35; }
 .empty-ic svg { width: 30px; height: 30px; }
@@ -3225,17 +3147,10 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
 .card-desc { margin: 0 0 14px; font-size: 12.5px; line-height: 1.6; }
 /* 卡片内末尾的一行小注：与内容之间留一段空白，不用内联 margin 补 */
 .card-note { font-size: 12px; color: var(--faint); margin-top: 12px; }
-/* 居中的卡片脚注：通知渠道的空态由「图标 + 一句话 + 支持列表」三块组成，
-   前两块居中而脚注左对齐会像没对齐。居中的只有这一处，不加到 .card-note 上。 */
-.card-note-center { text-align: center; }
 /* 卡片内分隔线之后的一组动作按钮 */
 .card-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 /* 紧跟说明段落的动作条：上边距由段落的下边距提供，再多一层就空得发虚 */
 .card-acts.top { margin-top: 0; }
-.card-acts .faint-note { font-size: 12.5px; color: var(--faint); }
-/* 卡片内的小节标题（安装包缓存 / 备份文件之类） */
-.card-h4 { font-size: 13px; font-weight: 600; margin: 18px 0 8px; }
-.card-h4:first-of-type { margin-top: 4px; }
 /* 导出区的说明紧贴标题、与下方按钮之间留白 */
 .card-hint { font-size: 12px; color: var(--faint); margin-top: 9px; }
 

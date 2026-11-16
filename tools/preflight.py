@@ -63,6 +63,11 @@ def build_gates(node, quick):
         Gate("i18n 字典一致性", [PY, os.path.join(TOOLS, "check_i18n.py")]),
         Gate("CSS 与静态资源", [PY, os.path.join(TOOLS, "check_css.py")]),
         Gate("文档链接与图片", [PY, os.path.join(TOOLS, "check_docs.py")]),
+        # 一键升级的后端验收：打桩网络与安装器，把 .part / 原子改名 / 错误码 /
+        # 回滚包查找 / attempt 递增 / busy 判定真跑一遍。这些都不在语法检查的
+        # 覆盖范围内，而任何一条错都会让升级失败时没有任何反馈。
+        Gate("一键升级后端验收", [PY, os.path.join(TOOLS, "test_update_flow.py")]),
+        Gate("备份恢复回归", [PY, os.path.join(TOOLS, "test_backup_restore.py")]),
     ]
     if quick:
         return gates
