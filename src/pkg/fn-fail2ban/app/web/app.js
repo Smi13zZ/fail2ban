@@ -3273,6 +3273,8 @@
       return (Number(b.t) || 0) - (Number(a.t) || 0);
     });
     var updateKeepN = Number(data.updates_keep) || 0;
+    // 当前运行的版本号：安装包文件名里带它，就是「当前版本」那个包
+    var currentVersion = String(data.current_version || '');
     // 安装包真正落盘的目录（后端给的是 @apphome 下的工作区，不是 @appdata/update）
     var pkgDir = String(data.packages_dir || '');
     var logEst = storageEstimateText('logs');
@@ -3346,12 +3348,19 @@
         '<th class="num" style="width:96px">' + t('common.size') + '</th>' +
         '</tr></thead><tbody>';
       packages.forEach(function (item) {
+        // 文件名与「当前版本 / 未下载完」标记同一行，时间单独占第二行；
+        // 手机上名称独占首行、时间与标记挪到第二行（见 CSS 的 order 规则）。
+        var isCurrent = currentVersion && String(item.name).indexOf(currentVersion) >= 0;
+        var flag = item.partial
+          ? '<span class="pkgflag"><span class="chip err">' + esc(t('stor.partialBadge')) + '</span></span>'
+          : (isCurrent
+            ? '<span class="pkgflag"><span class="tagcur">' + esc(t('stor.currentBadge')) + '</span></span>'
+            : '');
         html += '<tr><td class="sname">' +
-          '<div class="mono ellipsis" title="' + esc(item.name) + '">' + esc(item.name) + '</div>' +
-          '<div class="sub">' +
-          (item.partial
-            ? '<span class="chip err">' + esc(t('stor.partialBadge')) + '</span>'
-            : '<span class="faint">' + esc(fmtTime(item.t)) + '</span>') +
+          '<div class="pkgrow">' +
+          '<span class="pkgname mono" title="' + esc(item.name) + '">' + esc(item.name) + '</span>' +
+          flag +
+          '<span class="pkgtime">' + esc(fmtTime(item.t)) + '</span>' +
           '</div></td>' +
           '<td class="num mono">' + esc(fmtSize(item.bytes || 0)) + '</td>' +
           '</tr>';

@@ -2005,6 +2005,14 @@ details.raw pre {
 .chip .mono { font-size: 11px; }
 .chip.err { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
 .chip.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+/* 「当前版本」标记：实心反转色，浅色主题近黑底白字，深色主题近白底深字。 */
+.tagcur {
+  display: inline-flex; align-items: center;
+  padding: 3px 6px; border-radius: 5px;
+  font-size: 11px; font-weight: 500; line-height: 1;
+  white-space: nowrap;
+  background: var(--primary); color: var(--primary-fg);
+}
 
 /* --------------------------------------------------------- 模态确认框 --- */
 
@@ -3230,6 +3238,20 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
 .ttable.tstorage td .btn.sm { white-space: nowrap; }
 .ttable.tstorage .chip { height: 20px; padding: 0 7px; font-size: 11px; }
 .ttable.tstorage .chip.err { background: var(--danger-soft); color: var(--danger); }
+/* 安装包缓存的行：文件名与「当前版本 / 未下载完」标记同一行，时间单独占第二行。
+   名称按内容宽度收缩（长名字省略号），标记始终留在第一行右侧；
+   手机上换成「名称独占一行、时间 + 标记占第二行」，见 720px 断点。 */
+.ttable.tstorage .pkgrow { display: flex; flex-wrap: wrap; align-items: center; column-gap: 6px; }
+.ttable.tstorage .pkgname {
+  flex: 0 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ttable.tstorage .pkgflag { flex: 0 0 auto; display: inline-flex; align-items: center; }
+.ttable.tstorage .pkgtime {
+  flex: 0 0 100%; margin-top: 2px;
+  font-size: 11px; color: var(--faint);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
 /* 操作列：左对齐。右对齐会把按钮推到列的最右边缘，
    与表头（空）之间的间距看起来比其它列大一圈。 */
@@ -3273,6 +3295,15 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
     direction: rtl;
     text-align: left;
   }
+  /* 安装包缓存：名称独占首行，第二行是「时间 + 当前版本/未下载完」。
+     时间按正常顺序左对齐，不吃上面那条 direction:rtl
+     （那会把「2026-11-19 15:54:03」排成「15:54:03 2026-11-19」）。 */
+  .ttable.tstorage .pkgname { flex: 0 0 100%; }
+  .ttable.tstorage .pkgtime {
+    order: 2; flex: 0 1 auto; font-size: 10px;
+    direction: ltr; text-align: left;
+  }
+  .ttable.tstorage .pkgflag { order: 3; }
   /* 备份清单：窄屏收起「大小」列，把宽度留给时间与两个按钮 */
   .ttable.tbackup th:nth-child(2),
   .ttable.tbackup td:nth-child(2) { display: none; }
