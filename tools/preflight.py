@@ -58,6 +58,9 @@ def build_gates(node, quick):
         Gate("结构检查（缩进跑偏 / 未定义名字 / 死读属性）",
              [PY, os.path.join(TOOLS, "check_structure.py")]),
         Gate("Python 编译", [PY, "-m", "compileall", "-q", G.BIN]),
+        # 版本号在 manifest 与 server.py 两处维护，只改一处会打出「包名新、
+        # 自报旧」的包，本机检查更新会永远认为自己落后一个版本。
+        Gate("版本号一致性", [PY, os.path.join(TOOLS, "check_version.py")]),
         Gate("i18n 自测（变异样本）",
              [PY, os.path.join(TOOLS, "check_i18n.py"), "--self-test"]),
         Gate("i18n 字典一致性", [PY, os.path.join(TOOLS, "check_i18n.py")]),
