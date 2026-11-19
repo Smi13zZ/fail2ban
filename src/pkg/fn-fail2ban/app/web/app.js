@@ -3676,9 +3676,9 @@
   /* 更新失败条：任意页面都能看到的一句话 + 「查看详情」+ 单独关闭。
      从横幅或概览页发起更新、失败后用户往往不在设置页，失败原因只渲染在设置卡片
      里等于没有反馈 —— 这一条独立于设置页，是唯一还看得见的地方。 */
+  // 失败条左侧用叉号：这条同时表达「出错了」和「可以关掉」，与横幅的星标区分开。
   var UPFAIL_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" ' +
-    'stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/>' +
-    '<path d="M12 7.8v5"/><path d="M12 16.2v.01"/></svg>';
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 
   function paintUpdateFail() {
     var bar = $('#upFail');
@@ -3696,8 +3696,8 @@
     if (detail) detail.textContent = t('update.bannerDetail');
     var close = $('#upFailClose');
     if (close) {
-      close.title = t('common.close');
-      close.setAttribute('aria-label', t('common.close'));
+      close.title = t('update.dismissFail');
+      close.setAttribute('aria-label', t('update.dismissFail'));
     }
   }
 
@@ -3834,7 +3834,8 @@
   // 只写一个空的 span 的话，图标不会出现 —— 遮罩上看不到任何进行中的提示。
   var UP_SPIN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
     'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' +
-    '<path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1"/><path d="M20.7 4.4v5h-5"/></svg>';
+    '<path d="M20 11A8 8 0 0 0 6.3 6.3L4 8.5"/><path d="M4 4v4.5h4.5"/>' +
+    '<path d="M4 13a8 8 0 0 0 13.7 4.7L20 15.5"/><path d="M20 20v-4.5h-4.5"/></svg>';
 
   function openUpOverlay(title) {
     var overlay = $("#upOverlay");
@@ -4013,52 +4014,40 @@
     var spin = $("#upSpin");
     if (spin && ok) spin.classList.add("done");
     if (ok) {
-      // 成功那一帧不能编字节数：done/total 是字节计数器，塞 100/100 会渲染成
-      // 「100 B / 100 B」。下载结束后真实总量本来就在，保持不动；没有总量就
-      // 退回「准备中…」，绝不假装 100%。
-      paintUpShape("track");
-      var fill = $("#upProgFill");
-      if (fill) fill.style.width = "100%";
-      var pct = $("#upProgPct");
-      if (pct) pct.textContent = "100%";
-      var bytes = $("#upProgBytes");
-      if (bytes) {
-        var total = Number(prog && prog.total) || 0;
-        var done = Number(prog && prog.done) || 0;
-        bytes.textContent = total > 0
-          ? t("update.bytes", { done: fmtSize(done), total: fmtSize(total) })
-          : "";
-      }
+      // 成功帧沿用当前进度形态，不强行画 100%：那两个计数器是字节数，
+      // 塞 100/100 会渲染成「100 B / 100 B」。安装阶段 total 已清零，
+      // 所以这里保持「准备中…」，只把阶段文字换成完成结论。
       paintUpStage(t("update.done", { v: (prog && prog.current) || "" }));
     } else if (kind === "timeout") {
       paintUpStage(t("update.pollTimeout"));
     } else {
       paintUpStage(t("update.phaseFailed"));
     }
-    // 超时也要给一个重载入口：面板可能只是慢，用户刷新就能确认结果
-    var reload = $("#upReload");
-    if (reload) reload.hidden = false;
     if (ok) {
       try { sessionStorage.removeItem('f2b-upgrading'); } catch (e) { /* ignore */ }
       clearUpdateFailure();
       toast(t("update.done", { v: (prog && prog.current) || "" }), "ok", 4000);
       setTimeout(function () { location.reload(); }, 1500);
     } else if (kind === "timeout") {
+      // 失败/超时一律把遮罩收起：遮罩是「正在升级」的表达，升级已经不在了
+      // 还挂着它，用户会以为还在跑。原因交给页面顶部的失败条。
+      closeUpOverlay();
       // 等不到了不代表升级失败。脚本是分离执行的，它到底回滚了还是没有回滚包，
       // 只有 install.log 的最后几行知道 —— prog.outcome 由后端从日志里认出来。
       var outcome = String((prog && prog.outcome) || "");
       var text = outcome === "rolledBack"
-        ? t("update.installFailDetail", { detail: t("update.rolledBack") })
+        ? t("update.installFailDetail", { v: t("update.rolledBack") })
         : (outcome === "noRollback"
-          ? t("update.installFailDetail", { detail: t("update.noRollbackNotice") })
+          ? t("update.installFailDetail", { v: t("update.noRollbackNotice") })
           : t("update.pollTimeout"));
       setUpdateFailure(text);
       toast(text, "warn", 9000);
     } else {
       // 后端明确报失败：没有升级在跑，别让下次刷新还弹「正在升级」
+      closeUpOverlay();
       try { sessionStorage.removeItem('f2b-upgrading'); } catch (e) { /* ignore */ }
       setUpdateFailure(t("update.installFailDetail", {
-        detail: updateCodeText(prog && prog.code, prog && (prog.detail || prog.error))
+        v: updateCodeText(prog && prog.code, prog && (prog.detail || prog.error))
       }));
       toast(state.update.error, "err", 9000);
     }
@@ -4071,7 +4060,7 @@
     var target = info.latest || "";
     // 升级用站内模态确认：window.confirm 是同步阻塞的，
     // 遮罩起来以后它会把轮询一起卡住，看起来像升级卡死。
-    askConfirm(t("update.installConfirm", { version: target || "—" }), {
+    askConfirm(t("update.installConfirm", { v: target || "—" }), {
       title: t("update.install"),
       ok: t("update.install")
     }).then(function (ok) {
@@ -4123,7 +4112,7 @@
             return;
           }
           setUpdateFailure(t("update.installFailDetail", {
-            detail: updateCodeText(code, data.detail || data.error, data.version)
+            v: updateCodeText(code, data.detail || data.error, data.version)
           }));
           toast(state.update.error, "err", 9000);
           if (inSettingsTab('update')) renderSettings();
@@ -4154,7 +4143,7 @@
           stopUpdatePoll();
           closeUpOverlay();
           setUpdateFailure(t("update.installFailDetail", {
-            detail: updateCodeText(code, payload.error, payload.latest)
+            v: updateCodeText(code, payload.error, payload.latest)
           }));
           toast(state.update.error, "err", 9000);
           if (inSettingsTab('update')) renderSettings();
