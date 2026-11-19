@@ -352,15 +352,29 @@ def _tail(path, lines=LOG_TAIL_LINES):
     return "\n".join(rows[-lines:])
 
 
-#: 安装脚本落在日志里的两句结论。界面等超时之后靠它们判断「到底回滚了没有」——
+#: 安装脚本落在日志里的几句结论。界面靠它们判断「这一轮到底成没成」——
 #: 脚本是本进程被杀之后才跑完的，日志是唯一还活着的通道。
+#:
+#: 为什么不能只看版本号：版本号要在两处维护（manifest 与 server.py 的
+#: APP_VERSION），历史上有过只改一处的包 —— 装完之后新面板仍然自报旧版本，
+#: 界面于是永远等不到「版本变了」，遮罩一直挂着。日志里的这句话是直接的
+#: 事实陈述，与版本号怎么报无关。
+_SUCCEEDED = "=== 已升级到"
 _ROLLED_BACK = "已尝试回滚"
 _NO_ROLLBACK = "没有可用的上一个安装包"
 
 
 def _outcome(tail):
-    """从日志尾部认这次升级的结局：回滚了 / 无包可回滚 / 还看不出来。"""
+    """从日志尾部认这次升级的结局。
+
+    succeeded  脚本自己确认装上了并起来了（不依赖版本号比较）
+    rolledBack 装不上，已回滚到上一个版本
+    noRollback 装不上，且没有可回滚的包，需要人工介入
+    ""          还看不出来
+    """
     text = tail or ""
+    if _SUCCEEDED in text:
+        return "succeeded"
     if _ROLLED_BACK in text:
         return "rolledBack"
     if _NO_ROLLBACK in text:

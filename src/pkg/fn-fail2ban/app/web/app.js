@@ -627,19 +627,38 @@
     var before = '';
     try { before = sessionStorage.getItem('f2b-upgrading') || ''; } catch (e) { return; }
     if (!before) return;
-    var now = (state.meta && state.meta.app && state.meta.app.version) || '';
-    if (now && now !== before) {
-      // 已经升级完成：清掉标记，正常进入新版本
-      try { sessionStorage.removeItem('f2b-upgrading'); } catch (e) { /* ignore */ }
-      return;
-    }
-    // 版本没变：还在升级途中，接着显示遮罩与轮询。
-    // 这里不动 ignoreAttempt：页面已经重载过，上一轮的编号无从得知，重载后
-    // 读到的是服务端当前状态 —— 它若说失败，那就是这一轮的结论。
-    state.update.before = before;
-    openUpOverlay(t('update.upgrading'));
-    paintUpStage(t('update.installingWait'));
-    pollUpdateProgress();
+
+    // 先看服务端有没有「这一轮已经成功」的记录。这一步必须放在版本号比较之前：
+    // 装完的版本号可能仍然等于 before（包内版本号与 manifest 不一致时就会这样），
+    // 只看版本号会误判成「还在升级」，于是重载后又开一轮轮询、又触发一次刷新，
+    // 变成反复自我刷新的循环，用户看到的就是「更新完卡住 / 页面一直闪」。
+    api('update/progress').then(function (prog) {
+      var outcome = String((prog && prog.outcome) || '');
+      var now = (state.meta && state.meta.app && state.meta.app.version) || '';
+      var changed = !!(now && now !== before);
+      if (outcome === 'succeeded' || changed) {
+        // 升级已经完成：清掉标记，正常进入新版本，不再挂遮罩。
+        try { sessionStorage.removeItem('f2b-upgrading'); } catch (e) { /* ignore */ }
+        if (outcome === 'succeeded') {
+          var v = now || (prog && prog.current) || '';
+          toast(t('update.done', { v: v }), 'ok', 4000);
+        }
+        return;
+      }
+      // 版本没变且服务端也没说成功：确实还在升级途中，接着显示遮罩与轮询。
+      // 这里不动 ignoreAttempt：页面已经重载过，上一轮的编号无从得知，重载后
+      // 读到的是服务端当前状态 —— 它若说失败，那就是这一轮的结论。
+      state.update.before = before;
+      openUpOverlay(t('update.upgrading'));
+      paintUpStage(t('update.installingWait'));
+      pollUpdateProgress();
+    }).catch(function () {
+      // 读不到就按老逻辑走：遮罩挂上，让轮询自己去判断。
+      state.update.before = before;
+      openUpOverlay(t('update.upgrading'));
+      paintUpStage(t('update.installingWait'));
+      pollUpdateProgress();
+    });
   }
 
   /* ------------------------------------------------------- 概览自动刷新 */
@@ -3969,6 +3988,28 @@
           finishUpgrade(false, prog, 'failed');
           return;
         }
+        // 收尾判据有两级，缺一不可：
+        //
+        // 1) 安装脚本在日志里自己确认「=== 已升级到 X ===」。这是硬证据，
+        //    不依赖版本号怎么报。只看版本号会踩到一个真实的坑：版本号在
+        //    manifest 与 server.py 的 APP_VERSION 两处维护，历史上出现过只改
+        //    一处就发出去的包 —— 装完之后新面板仍然自报旧版本，界面于是永远
+        //    等不到「版本变了」，遮罩挂到 10 分钟超时，看起来就是「更新完卡住」。
+        // 2) 版本号变了（progress 或 meta 任一处）。作为兜底：老版本的脚本
+        //    日志里可能没有这句话。
+        var outcomeNow = String((prog && prog.outcome) || '');
+        if (outcomeNow === 'succeeded') {
+          stopUpdatePoll();
+          try { sessionStorage.removeItem('f2b-upgrading'); } catch (e) { /* ignore */ }
+          // 版本号以 meta 为准（progress 那一帧可能还是旧进程的快照）；
+          // 拿不到就退回进度里的，再拿不到就不写版本号，别编一个。
+          return api('meta').then(function (meta) {
+            var v = (meta && meta.app && meta.app.version) || (prog && prog.current) || '';
+            finishUpgrade(true, { current: v });
+          }).catch(function () {
+            finishUpgrade(true, { current: (prog && prog.current) || '' });
+          });
+        }
         // progress 里就带 current（已装版本），先用它判，取不到再问 meta
         if (state.update.before && prog && prog.current &&
             String(prog.current) !== state.update.before) {
@@ -4032,9 +4073,19 @@
       // 失败/超时一律把遮罩收起：遮罩是「正在升级」的表达，升级已经不在了
       // 还挂着它，用户会以为还在跑。原因交给页面顶部的失败条。
       closeUpOverlay();
-      // 等不到了不代表升级失败。脚本是分离执行的，它到底回滚了还是没有回滚包，
+      // 等不到了不代表升级失败。脚本是分离执行的，它到底成没成、回滚了没有，
       // 只有 install.log 的最后几行知道 —— prog.outcome 由后端从日志里认出来。
       var outcome = String((prog && prog.outcome) || "");
+      try { sessionStorage.removeItem('f2b-upgrading'); } catch (e) { /* ignore */ }
+      if (outcome === "succeeded") {
+        // 超时前最后一刻脚本其实已经报告成功了。这种情况往往是版本号没变
+        // （包内版本与 manifest 不一致），等不到「版本变了」这个信号，但升级
+        // 确实完成了 —— 不能报成超时让人去应用中心再查一遍。
+        var okV = (prog && prog.current) || '';
+        toast(t("update.done", { v: okV }), "ok", 4000);
+        setTimeout(function () { location.reload(); }, 1500);
+        return;
+      }
       var text = outcome === "rolledBack"
         ? t("update.installFailDetail", { v: t("update.rolledBack") })
         : (outcome === "noRollback"

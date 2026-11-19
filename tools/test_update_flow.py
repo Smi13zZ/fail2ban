@@ -303,6 +303,77 @@ def test_validate_fpk_codes():
     check(code == "pkgMissing", "空包 → pkgMissing", "实际：%r" % code)
 
 
+def test_outcome_detects_success_without_version_change():
+    """升级成功但版本号没变时，收尾判据不能只靠版本号。
+
+    真实事故：26.11.62 的包 manifest 是 26.11.62，但 app/bin/server.py 的
+    APP_VERSION 漏改仍是 26.11.61。从 26.11.61 升到 26.11.62 时，新面板装好、
+    起来了，却仍然自报 26.11.61 —— 界面靠「版本号变了」判断收尾，于是永远等不到，
+    遮罩挂到 10 分钟超时。用户看到的就是「更新完卡住、不能自动刷新」。
+
+    修法：让安装脚本的日志成为独立证据（"=== 已升级到 X ==="），后端把它
+    识别成 outcome=succeeded，前端据此收尾，不再依赖版本号比较。
+    """
+    print("[11] 升级成功但版本号没变也能收尾")
+    # 后端把成功那句话认成 succeeded
+    tail_ok = "=== 已升级到 26.11.62 ===\n"
+    check(installer._outcome(tail_ok) == "succeeded",
+          "脚本报「已升级到」→ outcome=succeeded", "实际：%r" % installer._outcome(tail_ok))
+    # 同理覆盖「由 cmd/main 启动」那条分支
+    tail_ok2 = "=== 已升级到 26.11.62（由 cmd/main 启动） ===\n"
+    check(installer._outcome(tail_ok2) == "succeeded",
+          "cmd/main 启动分支也算成功", "实际：%r" % installer._outcome(tail_ok2))
+    # 回滚与无包仍各自归类，不能被成功判据吞掉
+    check(installer._outcome("=== 已尝试回滚，当前版本：26.11.61 ===") == "rolledBack",
+          "回滚仍识别为 rolledBack")
+    check(installer._outcome("=== 没有可用的上一个安装包，无法回滚 ===") == "noRollback",
+          "无包仍识别为 noRollback")
+    check(installer._outcome("") == "", "空日志 → 无结论")
+    check(installer._outcome("=== start 中 ===\n") == "", "只有无关日志 → 无结论")
+
+    # 前端必须在版本号比较之外，单独认这个 outcome。
+    # 断言要锚定到具体那一段代码 —— 全文搜 "succeeded" 会被超时分支里的
+    # 同名字样满足，把主判据删掉也照样 PASS（变异测试验证过这个坑）。
+    app_path = os.path.join(os.path.dirname(BIN), "web", "app.js")
+    with open(app_path, encoding="utf-8") as fh:
+        app = fh.read()
+    # 主判据：pollUpdateProgress 里在版本比较之前，按 outcome 收尾
+    i_poll = app.find("function pollUpdateProgress")
+    i_ver = app.find("state.update.before && prog && prog.current", i_poll)
+    seg_main = app[i_poll:i_ver] if (i_poll >= 0 and i_ver > i_poll) else ""
+    check(bool(seg_main) and "succeeded" in seg_main,
+          "前端在版本比较之前按 outcome 收尾")
+    check("outcomeNow" in seg_main,
+          "主判据取的是本轮 outcome 变量")
+    # 超时分支：最后一刻脚本报成功时不能报成超时
+    i_to = app.find('kind === "timeout"')
+    seg_to = app[i_to: i_to + 3000] if i_to >= 0 else ""
+    check(bool(seg_to) and "succeeded" in seg_to,
+          "超时分支里也处理 succeeded，不误报超时")
+    check("=== 已升级到" in installer._SUCCEEDED,
+          "后端成功标记与安装脚本输出一致")
+
+    # 重载后不能「因为版本号没变又开一轮轮询」，否则会自我刷新成死循环
+    i_resume = app.find("function resumePendingUpgrade")
+    # 用「下一个顶层函数注释或函数定义」当边界：函数体以右花括号结束，
+    # 直接找下一个 "function " 会把整段切空（相邻函数之间有注释块）。
+    i_after = -1
+    if i_resume >= 0:
+        for marker in ("\n  /* ---", "\n  function "):
+            k = app.find(marker, i_resume + 40)
+            if k >= 0 and (i_after < 0 or k < i_after):
+                i_after = k
+    seg_resume = app[i_resume:i_after] if (i_resume >= 0 and i_after > i_resume) else app[i_resume:i_resume + 2500]
+    check(bool(seg_resume), "找到 resumePendingUpgrade")
+    check("outcome" in seg_resume,
+          "重载恢复时先看服务端 outcome，不只看版本号")
+    # outcome 判据必须出现在版本号比较之前
+    i_out = seg_resume.find("outcome")
+    i_ver2 = seg_resume.find("now !== before")
+    check(i_out >= 0 and i_ver2 >= 0 and i_out < i_ver2,
+          "outcome 判据排在版本号比较之前（否则会反复自我刷新）")
+
+
 def main():
     for name in ("TRIM_PKGVAR", "TRIM_PKGETC", "TRIM_PKGDEST"):
         pass
@@ -317,6 +388,7 @@ def main():
         test_busy_while_checking,
         test_failure_then_new_attempt_not_stale,
         test_validate_fpk_codes,
+        test_outcome_detects_success_without_version_change,
     ]
     for fn in tests:
         try:
