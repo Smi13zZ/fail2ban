@@ -302,7 +302,7 @@ LAYOUT = (
     # 拿不到 installer 时「更新缓存」退回 @appdata/update，那时 install.log 就在
     # 它内部，再标 False 会让合计把它算两遍。_layout_paths() 会按真实包含关系
     # 重新判定一次，这里只是默认值。
-    ("install_log", "升级安装日志", ("update", "install.log"), "file", False),
+    ("install_log", "更新安装日志", ("update", "install.log"), "file", False),
     ("deliveries", "通知投递记录", ("deliveries.json",), "file", False),
     ("events", "通知事件记录", ("events.json",), "file", False),
     ("notifications", "通知设置", ("notifications.json",), "file", False),
@@ -526,7 +526,7 @@ def log_files(var_dir):
 
 
 def clear_logs(var_dir):
-    """清空运行日志与升级安装日志，删掉轮转出来的历史副本。
+    """清空运行日志与更新安装日志，删掉轮转出来的历史副本。
 
     截断的文件必须在 var_dir 内部（server.log / install.log 都在那里）；
     轮转副本允许出现在 server.log 同目录，按那个目录做边界。
@@ -711,7 +711,7 @@ def cleanup(var_dir, target="logs", keep=None, current_version="", backups=None)
 
     target 取 logs / backups / all：
 
-    * logs：截断运行日志与升级安装日志，删除轮转副本；
+    * logs：截断运行日志与更新安装日志，删除轮转副本；
     * backups：归档备份保留最新 keep 份，配置文件快照保留最新 SNAPSHOT_KEEP 份；
     * all：以上两者，再加更新缓存（保留 UPDATES_KEEP 个包，豁免运行版本与
       rollback.fpk）。

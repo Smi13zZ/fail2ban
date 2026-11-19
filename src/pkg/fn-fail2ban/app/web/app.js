@@ -3211,7 +3211,7 @@
     if (!data) return { bytes: 0, removed: 0, keep: 0 };
     // 后端至少保留 1 份备份，估算不能按 0 算成「全删」
     var keep = Math.max(1, Number(data.keep) || 0);
-    // 日志清理会截断 server.log 与升级安装日志、并删掉轮转副本。
+    // 日志清理会截断 server.log 与更新安装日志、并删掉轮转副本。
     // 安装日志位于 update/ 目录内部（nested），总量统计时不计，但清理时会真的回收。
     var logsBytes = 0;
     (data.items || []).forEach(function (item) {
