@@ -340,6 +340,24 @@ def _install_log_path(var_dir=None):
     return os.path.join(d, "install.log") if d else ""
 
 
+def _reset_install_log(var_dir=None):
+    """每一轮升级开始时清空安装日志。
+
+    安装脚本只追加，而 progress() 的 outcome 是从日志尾部认出来的。不先清空的话，
+    上一轮留下的「=== 已升级到 X ===」会在新一轮刚起步时被当成这一轮的结论 ——
+    界面立刻收尾并刷新，而这时脚本才刚要停服务，刷新必然撞在面板离线的窗口上，
+    页面就卡在遮罩里出不来（生产机 26.11.66 升级时实际踩到）。
+    """
+    path = _install_log_path(var_dir)
+    if not path:
+        return
+    try:
+        with open(path, "wb"):
+            pass
+    except OSError as exc:
+        _emit("update: 无法清空安装日志：%r" % (exc,))
+
+
 def _tail(path, lines=LOG_TAIL_LINES):
     if not path or not os.path.isfile(path):
         return ""
@@ -401,7 +419,14 @@ def progress():
         out["current"] = read_installed_version()
     tail = _tail(_install_log_path())
     out["log"] = tail
-    out["outcome"] = _outcome(tail)
+    # 本轮还没结束（下载 / 安装中）时不下发 outcome：日志尾部此刻可能还是上一轮
+    # 的结论文本，界面拿到就会当场收尾。结论只在本轮跑完（阶段回到 idle 或
+    # failed）之后才有意义。
+    if str(out.get("phase") or "").lower() in (PHASE_DOWNLOADING, PHASE_INSTALLING,
+                                               PHASE_CHECKING):
+        out["outcome"] = ""
+    else:
+        out["outcome"] = _outcome(tail)
     if out.get("rollback") is None:
         # 还没走到准备回滚包那一步：按「当前版本有没有安装包副本」现算一次。
         # 不能拿 rollback.fpk 存不存在来判断 —— 那是上一轮留下的临时文件，
@@ -1144,6 +1169,7 @@ def install(version, url, var_dir, current, *, appcenter="", prev_fpk="",
         return fail_attempt("noCli", "找不到 appcenter-cli，无法自动安装")
 
     set_context(var_dir=var_dir, current=current)
+    _reset_install_log(var_dir)
 
     base = os.path.basename(str(url).split("?")[0])
     name = _safe_name(base) if base else "%s-%s.fpk" % (APP_NAME, target)

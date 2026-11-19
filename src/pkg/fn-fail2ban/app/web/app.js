@@ -4007,7 +4007,10 @@
         // 2) 版本号变了（progress 或 meta 任一处）。作为兜底：老版本的脚本
         //    日志里可能没有这句话。
         var outcomeNow = String((prog && prog.outcome) || '');
-        if (outcomeNow === 'succeeded') {
+        // 只有「本轮已经不在下载/安装中」时，日志里的成功结论才算数。
+        // 否则那是上一轮留下的尾巴：新一轮刚起步就被判成成功，界面会立刻
+        // 刷新，正好撞上面板停服的窗口，页面卡在遮罩里刷新不出来。
+        if (outcomeNow === 'succeeded' && phase === 'idle') {
           stopUpdatePoll();
           try { sessionStorage.removeItem('f2b-upgrading'); } catch (e) { /* ignore */ }
           // 版本号以 meta 为准（progress 那一帧可能还是旧进程的快照）；
@@ -4057,6 +4060,28 @@
     paintUpdateFail();
   }
 
+  // 装完后的自动刷新要等面板真的回来再刷。
+  // 升级脚本是「停服务 → 卸载 → 安装 → 启动」，成功结论出现的那一刻服务
+  // 往往正要停：这时立刻 location.reload() 等于主动撞进离线空窗，浏览器停在
+  // 错误页上再也回不来，用户看到的就是「更新完卡在这个界面刷新不出来」。
+  // 所以改成先探一次 meta（能答上来说明新进程已经在服务），拿不到就退避重试。
+  function reloadWhenBack(attempt) {
+    var n = Number(attempt) || 0;
+    api('meta').then(function () {
+      try { location.reload(); } catch (e) { /* ignore */ }
+    }).catch(function () {
+      // 等太久就把「立即重新加载」放出来：万一浏览器已经停在断网错误页上，
+      // 自动重试是回不来的，用户至少有一个按钮可以自己再试一次。
+      if (n >= 10) {
+        var btn = $("#upReload");
+        if (btn) btn.hidden = false;
+      }
+      // 100 × 800ms ≈ 80 秒：够覆盖「卸载 + 安装 + 首次启动」。
+      if (n >= 100) { try { location.reload(); } catch (e) { /* ignore */ } return; }
+      setTimeout(function () { reloadWhenBack(n + 1); }, 800);
+    });
+  }
+
   // mode: "ok" 装完 / "failed" 后端明确报错 / "timeout" 我们等不到了（不代表升级失败）
   function finishUpgrade(ok, prog, mode) {
     var kind = ok ? "ok" : (mode || "failed");
@@ -4077,7 +4102,7 @@
       try { sessionStorage.removeItem('f2b-upgrading'); } catch (e) { /* ignore */ }
       clearUpdateFailure();
       toast(t("update.done", { v: (prog && prog.current) || "" }), "ok", 4000);
-      setTimeout(function () { location.reload(); }, 1500);
+      reloadWhenBack(0);
     } else if (kind === "timeout") {
       // 失败/超时一律把遮罩收起：遮罩是「正在升级」的表达，升级已经不在了
       // 还挂着它，用户会以为还在跑。原因交给页面顶部的失败条。
@@ -4092,7 +4117,7 @@
         // 确实完成了 —— 不能报成超时让人去应用中心再查一遍。
         var okV = (prog && prog.current) || '';
         toast(t("update.done", { v: okV }), "ok", 4000);
-        setTimeout(function () { location.reload(); }, 1500);
+        reloadWhenBack(0);
         return;
       }
       var text = outcome === "rolledBack"

@@ -374,6 +374,51 @@ def test_outcome_detects_success_without_version_change():
           "outcome 判据排在版本号比较之前（否则会反复自我刷新）")
 
 
+def test_stale_log_does_not_finish_new_round():
+    """新一轮刚开始时，不能继承上一轮日志里的「已升级到 X」。
+
+    真实事故（2026-11-19，生产机 26.11.65 → 26.11.66）：安装脚本只追加日志，
+    上一轮留下的 "=== 已升级到 26.11.65 ===" 还在尾部。点了「一键更新」之后，
+    下载线程刚起来，进度接口就把这句旧话当成这一轮的结论发给界面 —— 界面当场
+    收尾、1.5 秒后刷新，而这时脚本才刚要停服务，刷新撞在面板离线的窗口上，
+    页面停在遮罩里再也刷不出来。修法两条：开工时清空日志；本轮没跑完（仍在
+    checking/downloading/installing）时不下发 outcome。
+    """
+    print("[12] 新一轮不继承上一轮的成功结论")
+    var = os.environ.get("TRIM_PKGVAR")
+    updir = installer._update_dir(var)
+    check(bool(updir), "能定位更新日志目录")
+    os.makedirs(updir, exist_ok=True)
+    log = os.path.join(updir, "install.log")
+    with open(log, "w", encoding="utf-8") as fh:
+        fh.write("=== 已升级到 26.11.65 ===\n")
+
+    installer.begin_attempt()
+    check(installer.progress()["outcome"] == "",
+          "checking 阶段不把上一轮的日志当结论",
+          "实际：%r" % installer.progress().get("outcome"))
+    installer._set(installer.PHASE_DOWNLOADING, "26.11.66", "", done=0, total=0)
+    check(installer.progress()["outcome"] == "",
+          "downloading 阶段不发 outcome",
+          "实际：%r" % installer.progress().get("outcome"))
+    installer._set(installer.PHASE_INSTALLING, "26.11.66", "")
+    check(installer.progress()["outcome"] == "",
+          "installing 阶段不发 outcome",
+          "实际：%r" % installer.progress().get("outcome"))
+
+    installer._reset_install_log(var)
+    with open(log, "rb") as fh:
+        check(fh.read() == b"", "开工时安装日志被清空")
+
+    installer._set(installer.PHASE_IDLE, "", "")
+    check(installer.progress()["outcome"] == "", "idle + 空日志 → 无结论")
+    with open(log, "w", encoding="utf-8") as fh:
+        fh.write("=== 已升级到 26.11.66 ===\n")
+    check(installer.progress()["outcome"] == "succeeded",
+          "跑完后仍按本轮日志认成功",
+          "实际：%r" % installer.progress().get("outcome"))
+
+
 def main():
     for name in ("TRIM_PKGVAR", "TRIM_PKGETC", "TRIM_PKGDEST"):
         pass
@@ -389,6 +434,7 @@ def main():
         test_failure_then_new_attempt_not_stale,
         test_validate_fpk_codes,
         test_outcome_detects_success_without_version_change,
+        test_stale_log_does_not_finish_new_round,
     ]
     for fn in tests:
         try:
