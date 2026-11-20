@@ -61,6 +61,9 @@ def build_gates(node, quick):
         # 版本号在 manifest 与 server.py 两处维护，只改一处会打出「包名新、
         # 自报旧」的包，本机检查更新会永远认为自己落后一个版本。
         Gate("版本号一致性", [PY, os.path.join(TOOLS, "check_version.py")]),
+        # manifest 混进 CRLF 会让 CI 拼出带 \r 的产物文件名，test -f 因此失败；
+        # 那类失败只出现在 CI 上（本地脚本自己拼路径），很难一眼看出。
+        Gate("manifest 行尾", [PY, os.path.join(TOOLS, "check_eol.py")]),
         Gate("i18n 自测（变异样本）",
              [PY, os.path.join(TOOLS, "check_i18n.py"), "--self-test"]),
         Gate("i18n 字典一致性", [PY, os.path.join(TOOLS, "check_i18n.py")]),
