@@ -123,6 +123,9 @@
       // 升级过程：poll 定时器、已展示过的最大百分比（只增不减）、安装前版本
       poll: null,
       maxPct: 0,
+    // 阶段单调性基线（同一 attempt 内有效）
+    monoAttempt: -1,
+    monoPhase: '',
       before: '',
       phase: '',
       done: false,
@@ -3904,9 +3907,27 @@
   // 下载结束后的安装阶段不再显示百分比：那一段本来就无处可测，留着满格
   // 进度条只是让人以为还有进度可看。成功的最后一帧由 finishUpgrade 单独画，
   // 那里保留真实总量（例如 9.00 MB / 9.00 MB），绝不塞 100/100。
+  /* 阶段只允许前进。服务端进度是瞬时快照，晚到的旧快照会把阶段推回去；
+     一旦回退，进度区会从「正在下载」跳回「准备中」，看起来像卡住。 */
+  var UP_PHASE_ORDER = { checking: 0, downloading: 1, verifying: 2, installing: 3 };
+
   function paintUpProgress(prog) {
     if (!prog) return;
     var phase = String(prog.phase || "").toLowerCase();
+    var attempt = typeof prog.attempt === 'number' ? prog.attempt : 0;
+    /* 单调性只在同一轮尝试内成立：attempt 变了必须整体重置，否则上一轮停在
+       installing、这一轮从 checking 开始会被判成后退而永远丢弃。 */
+    if (attempt !== state.update.monoAttempt) {
+      state.update.monoAttempt = attempt;
+      state.update.monoPhase = '';
+      state.update.maxPct = 0;
+    }
+    var prevRank = UP_PHASE_ORDER[state.update.monoPhase];
+    var nextRank = UP_PHASE_ORDER[phase];
+    if (prevRank !== undefined && nextRank !== undefined && nextRank < prevRank) {
+      return;
+    }
+    if (nextRank !== undefined) state.update.monoPhase = phase;
     paintUpStage(upPhaseText(prog.phase, prog.detail));
     state.update.phase = prog.phase || "";
 
@@ -4208,7 +4229,10 @@
           state.update.attempt = data.attempt;
         }
         if (data && typeof data.rollback === 'boolean') state.update.rollback = data.rollback;
-        if (data && data.phase) paintUpProgress(data);
+        /* 不解安装响应里的 phase 来画进度：那是后端刚置成 downloading 的一帧
+           快照，done/total 还是 0（installer.install() 的返回体根本没有这两个
+           字段）。拿它绘制会把正在走的进度条打回「准备中」，紧接着就是
+           20 秒停机窗口 —— 用户看到的是一个冻住的遮罩。进度只认轮询。 */
       })
       .catch(function (err) {
         // 后端把「已在升级 / 没有可用更新」这类拒绝放在 4xx 里，code 挂在错误

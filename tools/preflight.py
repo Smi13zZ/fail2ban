@@ -66,6 +66,9 @@ def build_gates(node, quick):
         Gate("i18n 字典一致性", [PY, os.path.join(TOOLS, "check_i18n.py")]),
         Gate("CSS 与静态资源", [PY, os.path.join(TOOLS, "check_css.py")]),
         Gate("文档链接与图片", [PY, os.path.join(TOOLS, "check_docs.py")]),
+        # 升级遮罩的阶段收敛：阶段只前进 / attempt 隔离 / 不用安装响应画进度。
+        # 这三条是「更新完卡在遮罩里」的直接成因，纯静态即可判定。
+        Gate("升级阶段收敛", [PY, os.path.join(TOOLS, "check_update_mono.py")]),
         # 一键升级的后端验收：打桩网络与安装器，把 .part / 原子改名 / 错误码 /
         # 回滚包查找 / attempt 递增 / busy 判定真跑一遍。这些都不在语法检查的
         # 覆盖范围内，而任何一条错都会让升级失败时没有任何反馈。
