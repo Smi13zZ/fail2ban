@@ -139,6 +139,10 @@
       // 上一次一键升级的失败原因。遮罩一关就只剩 toast，用户回头想看
       // 「刚才到底为什么失败」就没处看了；留在设置页顶部更经得起回看。
       error: '',
+      // 安装脚本日志的尾部：服务端每次轮询都带着，但只在失败时展示 ——
+      // 升级途中这堆输出用户看不懂也帮不上忙，失败时它是唯一能说清卡在哪
+      // 一步的证据。内容已在服务端滤掉 appcenter-cli 的转圈帧。
+      installLog: '',
       // 与上面同一句话，但渲染在内容区顶部的独立失败条上 —— 用户可能已经
       // 离开设置页，那条是唯一还看得见的地方。
       failText: '',
@@ -238,6 +242,13 @@
     return String(value === undefined || value === null ? '' : value)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  /* Release 正文的 Markdown → HTML。md.js 没加载上就退回「转义 + 保留换行」，
+     排版可以丢，绝不能把外网正文当 HTML 直接插进去。 */
+  function renderNotes(raw) {
+    if (window.MD) return window.MD.render(raw);
+    return esc(raw).replace(/\r?\n/g, '<br>');
   }
 
   function api(path, options) {
@@ -3619,6 +3630,15 @@
     // 顶部的失败条被用户关掉之后，这里仍然留着 —— 两处同源但各自可独立消失。
     if (state.update.error) {
       html += '<div class="update-error">' + esc(state.update.error) + '</div>';
+      /* 安装日志：只在失败时展开。升级途中这堆输出用户看不懂也帮不上忙，
+         失败时它是唯一能说清卡在哪一步的证据。服务端已滤掉 appcenter-cli
+         的转圈帧，只留 === 与 [Info] 行。 */
+      if (state.update.installLog) {
+        html += '<div class="upinstalllog">' +
+          '<div class="upinstalllog-head">' + esc(t('update.installLog')) + '</div>' +
+          '<pre class="upinstalllog-body">' + esc(state.update.installLog) + '</pre>' +
+          '</div>';
+      }
     }
     // 回滚包不存在时必须诚实说明：安装失败时没有自动回滚这回事，
     // 继续写「失败会自动回滚」等于承诺一件不会发生的事。
@@ -3629,7 +3649,10 @@
     // 版本更新说明：可滚动、限高，长 changelog 不会把卡片撑成一屏多
     html += '<div class="sep"></div><div class="section-title">' + t('update.notes') + '</div>';
     if (info && info.notes) {
-      html += '<div class="relnotes">' + esc(info.notes) + '</div>';
+      /* 正文是 Markdown，交给 md.js 渲染成 HTML 再插入。渲染器先把整段转义
+         再套标签，所以正文里的 <script> / javascript: 链接执行不了 ——
+         这里绝不能写成 esc() 之后再用正则把标签换回来，那样等于自己开后门。 */
+      html += '<div class="relnotes md">' + renderNotes(info.notes) + '</div>';
     } else {
       html += '<div class="faint">' + t('update.notesEmpty') + '</div>';
     }
@@ -3960,13 +3983,14 @@
     if (clearPct) clearPct.textContent = "";
     var clearBytes = $("#upProgBytes");
     if (clearBytes) clearBytes.textContent = "";
+    /* 不确定态那条不再写文字：它是「看不出进度」的表达，上方 .upstage 已经在
+       说当前动作，再塞一句「准备中…」只会自相矛盾。只补一个 aria-label 给
+       读屏软件 —— 视觉上是动画，语义上仍要能听懂在做什么。 */
     var ready = $("#upProgReady");
     if (ready) {
-      // detail 只在失败时才有内容，且是中文：英文界面按源文反查一次译文，
-      // 查不到就退回本地的「准备中…」，绝不让中文漏到英文界面上。
-      ready.textContent = prog.detail
-        ? (localizedSource(prog.detail, "update.stagePreparing"))
-        : t("update.stagePreparing");
+      var label = prog.detail ? localizedSource(prog.detail, "update.stagePreparing")
+                              : t("update.stagePreparing");
+      ready.setAttribute("aria-label", label);
     }
   }
 
@@ -3998,6 +4022,9 @@
       }
       api('update/progress').then(function (prog) {
         paintUpProgress(prog);
+        /* 安装日志尾部每次都收下，但只在失败时展示（看 state.update.error）。
+           下载/校验阶段文件里还是上一轮的记录，收下不会被显示出来。 */
+        if (prog && typeof prog.log === 'string') state.update.installLog = prog.log;
         if (prog && typeof prog.attempt === 'number') {
           state.update.attempt = prog.attempt;
         }
@@ -4122,12 +4149,9 @@
     if (ok) {
       try { sessionStorage.removeItem('f2b-upgrading'); } catch (e) { /* ignore */ }
       clearUpdateFailure();
-      toast(t("update.done", { v: (prog && prog.current) || "" }), "ok", 4000);
+      // 遮罩上那行已经写了完成结论，这里不再另弹右下角提示，免得同一句话说两遍。
       reloadWhenBack(0);
     } else if (kind === "timeout") {
-      // 失败/超时一律把遮罩收起：遮罩是「正在升级」的表达，升级已经不在了
-      // 还挂着它，用户会以为还在跑。原因交给页面顶部的失败条。
-      closeUpOverlay();
       // 等不到了不代表升级失败。脚本是分离执行的，它到底成没成、回滚了没有，
       // 只有 install.log 的最后几行知道 —— prog.outcome 由后端从日志里认出来。
       var outcome = String((prog && prog.outcome) || "");
@@ -4136,11 +4160,18 @@
         // 超时前最后一刻脚本其实已经报告成功了。这种情况往往是版本号没变
         // （包内版本与 manifest 不一致），等不到「版本变了」这个信号，但升级
         // 确实完成了 —— 不能报成超时让人去应用中心再查一遍。
+        // 按正常成功收尾：遮罩留着写完成结论，不另弹右下角提示。
         var okV = (prog && prog.current) || '';
-        toast(t("update.done", { v: okV }), "ok", 4000);
+        paintUpStage(t("update.done", { v: okV }));
+        var okSpin = $("#upSpin");
+        if (okSpin) okSpin.classList.add("done");
+        clearUpdateFailure();
         reloadWhenBack(0);
         return;
       }
+      // 失败/超时一律把遮罩收起：遮罩是「正在升级」的表达，升级已经不在了
+      // 还挂着它，用户会以为还在跑。原因交给页面顶部的失败条。
+      closeUpOverlay();
       var text = outcome === "rolledBack"
         ? t("update.installFailDetail", { v: t("update.rolledBack") })
         : (outcome === "noRollback"

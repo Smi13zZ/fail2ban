@@ -177,7 +177,9 @@
     <div class="uptitle" id="upTitle" data-i18n="update.upgrading">正在升级</div>
     <div class="upstage" id="upStage"></div>
     <!-- 进度区两种形态共用同一块固定高度：下载阶段有真实字节数 → 进度条 + 大小 + 百分比；
-         其余阶段没有可测总量 → 不画进度条，只在同一块空间里显示「准备中…」，不假装有百分比。 -->
+         其余阶段没有可测总量 → 不画百分比，改放一条来回流动的不确定条。
+         这里不写「准备中」：上面那行阶段文字已经在说具体动作，再写一句会打架，
+         而且静态文字看不出「还在动」。 -->
     <div class="upprog-block" id="upProgBlock">
       <div class="upprog-track" id="upProgTrack" hidden>
         <div class="upprog"><span class="upprog-fill" id="upProgFill" style="width:0%"></span></div>
@@ -186,7 +188,9 @@
           <span class="upmeta-pct" id="upProgPct"></span>
         </div>
       </div>
-      <div class="upprog-ready" id="upProgReady" data-i18n="update.stagePreparing">准备中…</div>
+      <div class="upprog indeterminate" id="upProgReady" hidden>
+        <div class="upprog-flow"></div>
+      </div>
     </div>
     <div class="upkeep" id="upKeep" data-i18n="update.keepOpen">升级期间请勿关闭页面。</div>
     <button type="button" class="btn sm" id="upReload" hidden data-i18n="update.reload">立即重新加载</button>
@@ -206,6 +210,7 @@
 <div class="toast-host" id="toastHost" role="status" aria-live="polite"></div>
 
 <script src="i18n.js"></script>
+<script src="md.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

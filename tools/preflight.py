@@ -72,6 +72,11 @@ def build_gates(node, quick):
         # 升级遮罩的阶段收敛：阶段只前进 / attempt 隔离 / 不用安装响应画进度。
         # 这三条是「更新完卡在遮罩里」的直接成因，纯静态即可判定。
         Gate("升级阶段收敛", [PY, os.path.join(TOOLS, "check_update_mono.py")]),
+        # Release 正文的 Markdown 渲染器：排版那条是功能，安全那条是防线
+        # （正文是外网拉回来的，先渲染再清理会在 onerror= / javascript: 上漏）。
+        # 它是 node 脚本，用 Node 跑，不是 Python。
+        Gate("Markdown 渲染器",
+             [node or "node", os.path.join(TOOLS, "test_md.js")]),
         # 一键升级的后端验收：打桩网络与安装器，把 .part / 原子改名 / 错误码 /
         # 回滚包查找 / attempt 递增 / busy 判定真跑一遍。这些都不在语法检查的
         # 覆盖范围内，而任何一条错都会让升级失败时没有任何反馈。

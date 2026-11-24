@@ -358,6 +358,32 @@ def _reset_install_log(var_dir=None):
         _emit("update: 无法清空安装日志：%r" % (exc,))
 
 
+#: appcenter-cli 把终端转圈动画直接写进重定向的日志：`\r\ stopping.\r| stopping.`
+#: 这类片段。按行切分后一条动画会变成几十行阶梯状的「stopping...」，把真正有用
+#: 的 `===` / `[Info]` 行挤出窗口。这里只保留能读的行。
+_SPINNER_WORDS = frozenset((
+    "stopping", "installing", "starting", "uninstalling", "verifying files",
+    "verifying", "downloading", "extracting", "compressing", "removing",
+    "cleaning", "unpacking", "upgrading",
+))
+
+
+def clean_install_log(text):
+    """滤掉 appcenter-cli 的转圈帧，只留真正能读的日志行。"""
+    out = []
+    for row in (text or "").splitlines():
+        s = row.strip()
+        if not s:
+            continue
+        if set(s) <= set("-\\|/. \t"):          # 纯符号帧（`.` / `..` / `\ ...`）
+            continue
+        word = s.lstrip("-\\|/").strip().rstrip(".").strip().lower()
+        if word in _SPINNER_WORDS:
+            continue
+        out.append(s)
+    return out
+
+
 def _tail(path, lines=LOG_TAIL_LINES):
     if not path or not os.path.isfile(path):
         return ""
@@ -366,7 +392,7 @@ def _tail(path, lines=LOG_TAIL_LINES):
             text = handle.read()
     except OSError:
         return ""
-    rows = text.strip().splitlines()
+    rows = clean_install_log(text)
     return "\n".join(rows[-lines:])
 
 
