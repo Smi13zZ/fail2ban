@@ -3527,26 +3527,6 @@
       '<path d="M18 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>';
   }
 
-  function updateAssetsHtml(info) {
-    // Release 里可能挂着别的东西（校验文件、源码包），只有 .fpk 才是安装包
-    var assets = (info.assets || []).filter(function (item) {
-      if (!item) return false;
-      var name = String(item.name || '');
-      return /.fpk$/i.test(name) || (!!item.url && /\.fpk$/i.test(String(item.url)));
-    });
-    if (!assets.length) return '';
-    // size 为 0 表示「没拿到大小」，不是「文件是空的」：
-    // GitHub 接口被限流后走的是发布订阅源，那条路径只有下载链接没有字节数。
-    return '<div class="section-title">' + t('update.assets') + '</div>' +
-      '<div class="assetlist">' +
-      assets.map(function (item) {
-        var size = Number(item.size) || 0;
-        return '<div class="assetrow"><span class="aname mono">' +
-          esc(item.name || '—') + '</span><span class="asize dim">' +
-          (size > 0 ? esc(fmtSize(size)) : esc(t('update.sizeUnknown'))) +
-          '</span></div>';
-      }).join('') + '</div>';
-  }
 
   function renderUpdate(embedded) {
     var body = updateHtml();
@@ -3663,8 +3643,6 @@
     } else {
       html += '<div class="faint">' + t('update.notesEmpty') + '</div>';
     }
-
-    html += updateAssetsHtml(info || {});
 
     // 仓库 / 上次检查 / 发布时间
     html += '<div class="sep"></div><dl class="kv">' +

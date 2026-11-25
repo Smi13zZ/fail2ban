@@ -54,6 +54,12 @@ def main():
             print("FAIL", item)
         return 1
 
+    extra = check_assets_removed()
+    if extra:
+        for item in extra:
+            print("FAIL", item)
+        return 1
+
     print("OK   升级遮罩阶段收敛规则齐备")
     return 0
 
@@ -240,6 +246,41 @@ def check_indeterminate_and_verline():
 
 
     fails.extend(check_app_shell(css))
+
+    return fails
+
+
+def check_assets_removed():
+    """更新页不再显示 Release 的安装包清单。
+
+    这块渲染的是 Release 资产，走发布订阅源那条路径拿不到字节数，
+    每次都印一行「大小未知」，没有信息量。已整体删除（函数、样式、词条），
+    不是用样式藏起来 —— 藏起来的东西没人记得它还在。
+    """
+    fails = []
+    web = os.path.join(REPO, "src", "pkg", "fn-fail2ban", "app", "web")
+    app = io.open(os.path.join(web, "app.js"), encoding="utf-8",
+                  errors="replace").read()
+    css_p = os.path.join(web, "style.css")
+    css = (io.open(css_p, encoding="utf-8", errors="replace").read()
+           if os.path.isfile(css_p) else "")
+    i18n_p = os.path.join(web, "i18n.js")
+    i18n = (io.open(i18n_p, encoding="utf-8", errors="replace").read()
+            if os.path.isfile(i18n_p) else "")
+
+    if "updateAssetsHtml" in app:
+        fails.append("app.js 里还留着 updateAssetsHtml（安装包区块没删干净）")
+    for cls in (".assetlist", ".assetrow"):
+        if cls in css:
+            fails.append("style.css 里还留着 %s（应为整体删除，不是藏起来）" % cls)
+    for key in ("update.assets", "update.sizeUnknown"):
+        if '"%s"' % key in i18n:
+            fails.append("i18n.js 里还留着 %s 词条" % key)
+
+    # 别把整页删空：发布说明与基本信息必须还在
+    for key in ("update.notes", "update.repo", "update.checkedLabel"):
+        if '"%s"' % key not in i18n:
+            fails.append("i18n.js 缺少 %s（删除安装包区块时误删了别的内容）" % key)
 
     return fails
 

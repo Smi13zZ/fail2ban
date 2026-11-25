@@ -982,7 +982,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
    过长的 logpath 靠 shorten() 截断，.table-wrap 自己可以横向滚动。 */
 td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
 
-
 .cell-actions {
   display: flex;
   gap: 6px;
@@ -2440,22 +2439,6 @@ details.raw pre {
 /* 卡片头正下方的说明：紧贴标题，不留 .help 默认的上间距 */
 /* 安装包清单：文件名与大小分成两行排，文件名独占一行。
    长文件名在窄列里会被折成两截，看起来像两个不同的包。 */
-.assetlist { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
-.assetrow {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 10px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-}
-.assetrow .aname {
-  min-width: 0;
-  font-size: 12.5px;
-  overflow-wrap: anywhere;
-}
-.assetrow .asize { flex: 0 0 auto; font-size: 12px; white-space: nowrap; }
 
 .help-tight { margin-top: 0; }
 
@@ -3141,7 +3124,6 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
 .seg button.on { background: var(--card); color: var(--text); }
 .seg button:hover:not(.on) { color: var(--text); }
 
-
 /* ====================================== 通知分区：开关行 / 渠道行 ==== */
 
 /* 开关行：左文右开关，一行一条，底部一条淡分隔线。
@@ -3191,7 +3173,6 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
 /* 空态图标：比文字大一号、压到 35% 透明，看起来是「这里还空着」而不是报错 */
 .empty-ic { display: flex; opacity: .35; }
 .empty-ic svg { width: 30px; height: 30px; }
-
 
 /* ==================== 存储 / 维护：表格、滚动区、说明段 ==================== */
 
@@ -3375,8 +3356,6 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
   .form-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
-
-
 @media (max-width: 720px) {
   .seg { overflow-x: auto; scrollbar-width: none; max-width: 100%; }
   .seg::-webkit-scrollbar { display: none; }
@@ -3421,7 +3400,6 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
   .log-tools > .btn { padding: 0 10px; }
 }
 
-
 /* 安装日志：卡片里的一块只读输出。等宽字体 + 保留换行，行数不多（12 行），
    短日志不滚动，超过一定高度才出现滚动条。只在失败时展开 —— 升级途中这堆输出
    用户看不懂也帮不上忙，失败时它是唯一能说清卡在哪一步的证据。
@@ -3439,7 +3417,6 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
   font-family: var(--mono); font-size: 12px; line-height: 20px;
   white-space: pre-wrap; overflow-wrap: anywhere;
 }
-
 
 /* ---- indeterminate progress ---- */
 /* 没有可测总量的阶段（检查 / 校验 / 安装）用一条来回流动的亮条，
@@ -3466,7 +3443,6 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
   }
 }
 
-
 /* 版本行：地球图标与版本文字的对齐。
    早期做法是 flex 居中 + 固定像素的 translateY 补偿，而那个补偿值是按某一种
    等宽字标定的。换一种字体，数字墨迹的高度就从 8.17px 变成 8.71px，固定的
@@ -3485,7 +3461,6 @@ html[data-density="compact"] .ttable td { padding-top: 6px; padding-bottom: 6px;
 }
 .ver-line svg { width: .94em; height: .94em; display: block;
                 transform: translateY(.12em); }
-
 
 /* 按钮里的图标容器：宽高交给 CSS，不依赖 svg 标签上的 width/height 属性。
    某些产品的图标是 `<svg viewBox="0 0 24 24">` 不带尺寸的，没有这条规则
