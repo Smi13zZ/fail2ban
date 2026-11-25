@@ -235,6 +235,11 @@
     '<path d="M4 4v4.5h4.5"/><path d="M4 13a8 8 0 0 0 13.7 4.7L20 15.5"/>' +
     '<path d="M20 20v-4.5h-4.5"/></svg>';
 
+  // 「一键更新」的下载图标：与刷新图标同一套线条（24 的 viewBox、描边 1.8），
+  // 两个按钮并排时线条粗细看起来一致。
+  var DOWNLOAD_ICON = SVG_OPEN + '<path d="M12 3.5v11"/>' +
+    '<path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4.5 19.5h15"/></svg>';
+
   var COLLAPSE_ICONS = {
     collapsed: SVG_OPEN + '<rect x="3" y="3" width="18" height="18" rx="2"/>' +
       '<path d="M9 3v18"/><path d="m14 9 3 3-3 3"/></svg>',
@@ -3608,7 +3613,8 @@
       '<span class="ic' + (checking ? ' spinning' : '') + '">' + REFRESH_ICON + '</span>' +
       (checking ? t('update.checking') : t('update.check')) + '</button>' +
       (hasUpdate
-        ? '<button class="btn sm primary" data-act="update-install">' + t('update.install') + '</button>'
+        ? '<button class="btn sm primary" data-act="update-install">' +
+          '<span class="ic">' + DOWNLOAD_ICON + '</span>' + t('update.install') + '</button>'
         : '') +
       '</div></div>';
 
@@ -3703,8 +3709,12 @@
     if (sub) sub.textContent = t('update.bannerSub');
     var detail = $('#upBannerDetail');
     if (detail) detail.textContent = t('update.bannerDetail');
-    var install = $('#upBannerInstall');
-    if (install) install.textContent = t('update.install');
+    // 横幅的「一键更新」：图标与文字各占一个 span。
+    // 这里只能改文字那个 span —— 直接写按钮的 textContent 会把图标抹掉。
+    var installIcon = $('#upBannerInstallIcon');
+    if (installIcon && !installIcon.firstChild) installIcon.innerHTML = DOWNLOAD_ICON;
+    var installLabel = $('#upBannerInstallLabel');
+    if (installLabel) installLabel.textContent = t('update.install');
   }
 
   function dismissUpdateBanner() {

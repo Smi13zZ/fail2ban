@@ -60,8 +60,63 @@ def main():
             print("FAIL", item)
         return 1
 
+    extra = check_install_icon()
+    if extra:
+        for item in extra:
+            print("FAIL", item)
+        return 1
+
     print("OK   升级遮罩阶段收敛规则齐备")
     return 0
+
+
+def check_install_icon():
+    """「一键更新」按钮必须带下载图标，且与「检查更新」的图标同档。
+
+    截图里两个按钮并排时，左边检查更新有刷新图标、右边一键更新是空的，
+    看着像没做完。两个入口都要有：设置页更新卡、顶部提示条。
+
+    两条容易踩的坑，断言里都盯着：
+      1. 横幅按钮的文字如果写成 `install.textContent = ...`，会把刚加的图标
+         整个替换掉 —— 必须文字单独一个 span，只改那个 span。
+      2. 图标尺寸要靠 .btn .ic 的 16px，不能各写各的，否则并排不一样粗。
+    """
+    fails = []
+    web = os.path.join(REPO, "src", "pkg", "fn-fail2ban", "app", "web")
+    app = io.open(os.path.join(web, "app.js"), encoding="utf-8",
+                  errors="replace").read()
+    html = io.open(os.path.join(web, "index.html"), encoding="utf-8",
+                   errors="replace").read()
+
+    # 必须真的有定义，不能只在别处引用某个同名变量
+    if not re.search(r"var\s+DOWNLOAD_ICON\s*=", app):
+        fails.append("app.js 缺少 DOWNLOAD_ICON 定义")
+    # 更新卡上的按钮：图标 span + 文字
+    if "data-act=\"update-install\"" not in app:
+        fails.append("找不到更新卡的「一键更新」按钮")
+    else:
+        i = app.find('data-act="update-install"')
+        seg = app[i:i + 260]
+        if "DOWNLOAD_ICON" not in seg:
+            fails.append("更新卡的「一键更新」没有下载图标")
+        if 'class="ic"' not in seg:
+            fails.append("更新卡的图标缺 .ic 容器（尺寸会塌）")
+
+    # 横幅：静态结构里要有图标占位与文字 span
+    if "upBannerInstallIcon" not in html:
+        fails.append("横幅「一键更新」缺图标占位")
+    if "upBannerInstallLabel" not in html:
+        fails.append("横幅「一键更新」缺文字 span（图标会被 textContent 抹掉）")
+
+    # 横幅重绘：不能再直接写按钮的 textContent
+    if re.search(r"\$\('#upBannerInstall'\)\.textContent", app) or \
+            "install.textContent = t('update.install')" in app:
+        fails.append("横幅重绘仍在写按钮的 textContent（图标会被抹掉）")
+    if "upBannerInstallIcon" in html and \
+            "installIcon.innerHTML = DOWNLOAD_ICON" not in app:
+        fails.append("横幅图标没有被填充")
+
+    return fails
 
 
 def check_notes_and_log(src):
