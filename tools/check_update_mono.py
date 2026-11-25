@@ -66,8 +66,72 @@ def main():
             print("FAIL", item)
         return 1
 
+    extra = check_icon_rounded()
+    if extra:
+        for item in extra:
+            print("FAIL", item)
+        return 1
+
     print("OK   升级遮罩阶段收敛规则齐备")
     return 0
+
+
+def check_icon_rounded():
+    """图标必须是带 alpha 的圆角图（四角透明）。
+
+    应用中心用深色底。母版是方形白底、四角不透明，打出来就是一块白瓦片，
+    与其它面板的圆角图标明显不同 —— 用户就是这么发现问题的。
+    修法是重绘时叠圆角遮罩，所以这里直接查产物的 alpha 通道。
+
+    顺带查三档不同尺寸：1256/64/16 都要圆，只修大图会在小瓦片上露馅。
+    """
+    fails = []
+    pkg = os.path.join(REPO, "src", "pkg", "fn-fail2ban")
+    targets = [
+        (os.path.join(pkg, "ICON.PNG"), 64),
+        (os.path.join(pkg, "ICON_256.PNG"), 256),
+        (os.path.join(pkg, "app", "ui", "images", "icon_64.png"), 64),
+        (os.path.join(pkg, "app", "ui", "images", "icon_16.png"), 16),
+    ]
+    try:
+        from PIL import Image
+    except ImportError:
+        return ["没有 Pillow，无法核对图标圆角"]
+
+    for path, size in targets:
+        rel = os.path.relpath(path, REPO)
+        if not os.path.isfile(path):
+            fails.append("缺少 %s" % rel)
+            continue
+        im = Image.open(path)
+        if im.mode != "RGBA":
+            fails.append("%s 不是 RGBA（%s：方形白底会显示成一块白瓦片）"
+                         % (rel, im.mode))
+            continue
+        px = im.convert("RGBA").load()
+        w, h = im.size
+        corners = [px[0, 0], px[w - 1, 0], px[0, h - 1], px[w - 1, h - 1]]
+        if any(c[3] > 8 for c in corners):
+            fails.append("%s 四角不透明（alpha=%s），不是圆角"
+                         % (rel, [c[3] for c in corners]))
+            continue
+        # 圆角半径：沿左上角对角线找第一个不透明点，r = i / (1 - 1/√2)
+        alpha = im.convert("RGBA").split()[3]
+        ap = alpha.load()
+        diag = None
+        for i in range(min(w, h)):
+            if ap[i, i] > 127:
+                diag = i
+                break
+        if diag is None:
+            fails.append("%s 全是透明的？" % rel)
+            continue
+        r = diag / (1 - 1 / 2 ** 0.5)
+        ratio = r / float(min(w, h))
+        if not (0.18 <= ratio <= 0.32):
+            fails.append("%s 圆角比例 %.2f 偏离兄弟图标（约 0.24）" % (rel, ratio))
+
+    return fails
 
 
 def check_install_icon():
