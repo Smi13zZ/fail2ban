@@ -229,6 +229,12 @@
     '<path d="M10.3 20a2 2 0 0 0 3.4 0"/></svg>';
 
   // 折叠按钮：方框 + 左侧竖线 + 方向箭头（收起时箭头朝左，展开时朝右）
+  // 「检查更新」按钮的刷新图标：与遮罩上的旋转图标同一套线条，
+  // 检查进行中时靠 .btn .ic.spinning 转起来。
+  var REFRESH_ICON = SVG_OPEN + '<path d="M20 11A8 8 0 0 0 6.3 6.3L4 8.5"/>' +
+    '<path d="M4 4v4.5h4.5"/><path d="M4 13a8 8 0 0 0 13.7 4.7L20 15.5"/>' +
+    '<path d="M20 20v-4.5h-4.5"/></svg>';
+
   var COLLAPSE_ICONS = {
     collapsed: SVG_OPEN + '<rect x="3" y="3" width="18" height="18" rx="2"/>' +
       '<path d="M9 3v18"/><path d="m14 9 3 3-3 3"/></svg>',
@@ -3619,6 +3625,7 @@
       (sub ? '<span>' + esc(sub) + '</span>' : '') + '</div>' +
       '<div class="vactions">' +
       '<button class="btn sm" data-act="update-check"' + (checking ? ' disabled' : '') + '>' +
+      '<span class="ic' + (checking ? ' spinning' : '') + '">' + REFRESH_ICON + '</span>' +
       (checking ? t('update.checking') : t('update.check')) + '</button>' +
       (hasUpdate
         ? '<button class="btn sm primary" data-act="update-install">' + t('update.install') + '</button>'
